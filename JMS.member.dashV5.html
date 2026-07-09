@@ -225,6 +225,1475 @@
     #print-statement-view{position:absolute;left:0;top:0;width:100%;display:block !important;}
     .statement-page{padding:30px 20px;}
   }
+
+  /* Logo Styles */
+  .logo-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+  .site-logo {
+    height: 64px;
+    width: auto;
+    display: block;
+  }
+  .statement-logo {
+    height: 72px;
+    width: auto;
+    display: block;
+    margin: 0 auto 10px;
+  }
+  @media print {
+    .statement-logo {
+      height: 64px;
+      margin-bottom: 8px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header>
+    <div class="logo-wrap">
+      <img src="https://raw.githubusercontent.com/raagassteven6-max/jms-holdings-funds/main/logo2.png" alt="JMS Holdings" class="site-logo">
+    </div>
+    <h1>Fund Ownership Dashboard</h1>
+    <div class="sub">Live unit &amp; ownership summary — read-only member view</div>
+  </header>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="analytics">Analytics</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-overview">
+    <main>
+      <section class="panel">
+        <h2>Cloud Storage Setup</h2>
+        <div class="config-ok" id="config-ok">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="8" fill="#0f766e"/><path d="M5 8l2 2 4-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Connected to JSONBin.io — data is syncing.
+        </div>
+        <div class="config-panel" id="config-panel">
+          <div style="margin-bottom:10px;font-size:12px;color:#92400e;line-height:1.5;">
+            <b>Connect to the fund.</b> Paste the <b>Bin ID</b> and <b>X-Master-Key</b> shared by the treasurer to view the live ownership data.
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="cfg-bin-id">Bin ID <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="cfg-bin-id" placeholder="Paste Bin ID from treasurer">
+            </div>
+            <div>
+              <label for="cfg-api-key">X-Master-Key <span style="color:var(--danger)">*</span></label>
+              <input type="password" id="cfg-api-key" placeholder="Paste API Key">
+            </div>
+          </div>
+          <button class="btn-connect" id="cfg-connect-btn">Connect &amp; Load Data</button>
+          <div class="config-status" id="cfg-status"></div>
+        </div>
+        <div class="bin-id-display" id="bin-id-display" style="display:none;"></div>
+        <div class="refresh-bar" id="refresh-bar" style="display:none;">
+          <span class="last-sync" id="last-sync">Last synced: —</span>
+          <button class="btn-refresh" id="btn-refresh">↻ Refresh Data</button>
+        </div>
+        <h2>Contribution Log</h2>
+        <div class="field-row" style="margin-bottom:14px;">
+          <div>
+            <label for="f-member">Your Name (optional — highlights your entries)</label>
+            <input type="text" id="f-member" placeholder="e.g. Maria" list="member-list">
+            <datalist id="member-list"></datalist>
+          </div>
+        </div>
+        <div class="table-scroll-wrap">
+          <table class="log-table" id="log-table">
+            <thead><tr><th>Date</th><th>Member</th><th>Amt</th><th>Val Before</th><th>NAV</th><th>Units</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+        <div class="empty-note" id="empty-note">No contributions logged yet — ask the treasurer to add entries.</div>
+        <div class="debug-panel" id="debug-panel" style="display:none;">
+          <h3>🐛 Debug Log</h3>
+          <button class="btn-tool" id="btn-toggle-debug" style="margin-bottom:10px;">Show/Hide Log</button>
+          <div class="debug-log" id="debug-log" style="display:none;"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Fund Performance</h2>
+        <div class="current-pv-display" id="current-pv-display" style="display:none;">
+          <div class="label">Current Portfolio Value</div>
+          <div class="value mono" id="display-current-pv">₱0.00</div>
+          <div class="nav mono" id="display-current-nav">Current NAV: —</div>
+        </div>
+        <div class="perf-grid" id="perf-grid" style="display:none;">
+          <div class="perf-card" id="card-total-contrib"><div class="perf-value mono" id="perf-total-contrib">₱0.00</div><div class="perf-label">Total Contributed</div></div>
+          <div class="perf-card" id="card-gain-loss"><div class="perf-value mono" id="perf-gain-loss">₱0.00</div><div class="perf-label">Unrealized Gain/Loss</div></div>
+          <div class="perf-card" id="card-gain-pct"><div class="perf-value mono" id="perf-gain-pct">0.00%</div><div class="perf-label">Return %</div></div>
+          <div class="perf-card"><div class="perf-value mono" id="perf-total-units">0</div><div class="perf-label">Total Units</div></div>
+        </div>
+        <h2 style="margin-top:8px;">Ownership Summary</h2>
+        <div class="me-card" id="me-card">
+          <h3>📊 Your Scorecard</h3>
+          <div class="me-stats">
+            <div class="me-stat"><div class="me-stat-value mono" id="me-total-contrib">₱0.00</div><div class="me-stat-label">Contributed</div></div>
+            <div class="me-stat"><div class="me-stat-value mono" id="me-current-value">₱0.00</div><div class="me-stat-label">Current Value</div></div>
+            <div class="me-stat"><div class="me-stat-value mono" id="me-units">0.0000</div><div class="me-stat-label">Your Units</div></div>
+            <div class="me-stat"><div class="me-stat-value mono" id="me-pct">0.00%</div><div class="me-stat-label">Your Share</div></div>
+            <div class="me-stat"><div class="me-stat-value mono" id="me-gain-loss">₱0.00</div><div class="me-stat-label">Gain / Loss</div></div>
+            <div class="me-stat"><div class="me-stat-value mono" id="me-gain-pct">0.00%</div><div class="me-stat-label">Return %</div></div>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-box">
+            <canvas id="pie-chart" width="220" height="220"></canvas>
+            <div class="center-label">
+              <div class="total-units mono" id="total-units-label">0</div>
+              <div class="total-caption">Total Units</div>
+            </div>
+          </div>
+        </div>
+        <div class="ledger-list" id="ledger-list"></div>
+        <div class="status-banner" id="status-banner"></div>
+        <div class="notice"><strong>Read-only view:</strong> only the treasurer can add or remove contributions. Contact the treasurer if you spot any discrepancies.</div>
+        <div class="notice" style="margin-top:10px;background:#f0fdf4;border-color:#bbf7d0;color:#14532d;"><strong>How this works:</strong> Your share is calculated in units based on the fund's NAV (Net Asset Value per Unit) at the time of each contribution. The fund's current market value is updated periodically by the treasurer, which determines your unrealized gain or loss. Green means your share is worth more than you put in; red means it's worth less.</div>
+      </section>
+    </main>
+  </div>
+
+  <div class="tab-panel" id="tab-analytics">
+    <div class="sub-tab-nav">
+      <button class="sub-tab-btn active" data-subtab="fund">Fund Metrics</button>
+      <button class="sub-tab-btn" data-subtab="member">Member Metrics</button>
+    </div>
+    <div class="sub-panel active" id="subtab-fund">
+      <div class="analytics-panel">
+        <h2>📈 Fund Performance Over Time</h2>
+        <div class="milestone-grid" id="fund-milestones">
+          <div class="milestone-card"><div class="value mono" id="ms-first-date">—</div><div class="label">First Contribution</div></div>
+          <div class="milestone-card"><div class="value mono" id="ms-highest-nav">—</div><div class="label">Highest NAV</div></div>
+          <div class="milestone-card"><div class="value mono" id="ms-lowest-nav">—</div><div class="label">Lowest NAV</div></div>
+          <div class="milestone-card"><div class="value mono" id="ms-total-contrib">—</div><div class="label">Total Contributed</div></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><span class="dot" style="background:var(--an-teal);"></span> NAV per Unit & Fund Value</div>
+          <div class="legend-inline"><div class="item"><span class="dot" style="background:var(--an-teal);"></span> NAV per Unit</div><div class="item"><span class="dot" style="background:var(--an-amber);"></span> Total Fund Value</div></div>
+          <div class="chart-scroll"><div class="chart-area" id="fund-chart-wrap"><canvas id="fund-chart"></canvas></div></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><span class="dot" style="background:var(--an-sky);"></span> Cumulative Contributions vs Fund Value</div>
+          <div class="legend-inline"><div class="item"><span class="dot" style="background:var(--an-sky);"></span> Cumulative Contributions</div><div class="item"><span class="dot" style="background:var(--an-purple);"></span> Fund Value (if tracked)</div></div>
+          <div class="chart-scroll"><div class="chart-area" id="contrib-chart-wrap"><canvas id="contrib-chart"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="sub-panel" id="subtab-member">
+      <div class="analytics-panel">
+        <h2>👤 Member Performance</h2>
+        <div class="member-selector">
+          <label for="member-select">Select Member</label>
+          <select id="member-select"><option value="">Choose a member...</option></select>
+        </div>
+        <button class="btn-print" id="btn-print-statement" style="display:none;">🖨️ Print Member Statement</button>
+        <div id="member-content" style="display:none;">
+          <div class="member-snapshot" id="member-snapshot">
+            <div class="snapshot-card"><div class="value mono" id="snap-contributed">₱0.00</div><div class="label">Total Contributed</div></div>
+            <div class="snapshot-card"><div class="value mono" id="snap-current">₱0.00</div><div class="label">Current Value</div></div>
+            <div class="snapshot-card"><div class="value mono" id="snap-return">0.00%</div><div class="label">Total Return</div></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title"><span class="dot" style="background:var(--an-teal);"></span> Member NAV vs Share Value Over Time</div>
+            <div class="legend-inline"><div class="item"><span class="dot" style="background:var(--an-teal);"></span> Avg Cost (NAV)</div><div class="item"><span class="dot" style="background:var(--an-amber);"></span> Share Value</div></div>
+            <div class="chart-scroll"><div class="chart-area small" id="member-chart-wrap"><canvas id="member-chart"></canvas></div></div>
+          </div>
+          <h3 style="margin-top:18px;">Contribution History</h3>
+          <div class="table-scroll-wrap">
+            <table class="member-history-table" id="member-history-table">
+              <thead><tr><th>Date</th><th>Amount</th><th>Fund NAV</th><th>Units</th><th>Avg Cost</th><th>Share Value</th></tr></thead>
+              <tbody id="member-history-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="no-data" id="member-no-data" style="display:block;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          <div>Select a member above to view their performance history and charts.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+    <!-- Print Statement View (hidden, shown via print dialog) -->
+    <div id="print-statement-view" style="display:none;">
+      <div class="statement-page">
+        <div class="statement-header">
+          <img src="https://raw.githubusercontent.com/raagassteven6-max/jms-holdings-funds/main/logo2.png" alt="JMS Holdings" class="statement-logo">
+          <div class="statement-title">JMS HOLDINGS FUND</div>
+          <div class="statement-subtitle">MEMBER INVESTMENT STATEMENT</div>
+        </div>
+        <div class="statement-meta">
+          <div><strong>Member Name:</strong> <span id="stmt-name">—</span></div>
+          <div><strong>Statement Period:</strong> <span id="stmt-period">—</span></div>
+          <div><strong>Date Generated:</strong> <span id="stmt-date">—</span></div>
+        </div>
+        <div class="statement-section">
+          <div class="statement-section-title">FUND SNAPSHOT</div>
+          <div class="statement-row"><span>Current NAV per Unit</span><span class="mono" id="stmt-nav">—</span></div>
+          <div class="statement-row"><span>Total Fund Value</span><span class="mono" id="stmt-fund-value">—</span></div>
+        </div>
+        <div class="statement-section">
+          <div class="statement-section-title">YOUR HOLDINGS</div>
+          <div class="statement-row"><span>Total Contributions</span><span class="mono" id="stmt-contrib">—</span></div>
+          <div class="statement-row"><span>Units Owned</span><span class="mono" id="stmt-units">—</span></div>
+          <div class="statement-row"><span>Ownership %</span><span class="mono" id="stmt-pct">—</span></div>
+          <div class="statement-row"><span>Current Value</span><span class="mono" id="stmt-current">—</span></div>
+          <div class="statement-row"><span>Unrealized Gain/Loss</span><span class="mono" id="stmt-gain">—</span></div>
+          <div class="statement-row"><span>Return %</span><span class="mono" id="stmt-return">—</span></div>
+        </div>
+        <div class="statement-section">
+          <div class="statement-section-title">CONTRIBUTION HISTORY</div>
+          <table class="statement-table">
+            <thead><tr><th>Date</th><th>Amount</th><th>Fund NAV</th><th>Units</th><th>Avg Cost</th><th>Share Value</th></tr></thead>
+            <tbody id="stmt-history-body"></tbody>
+          </table>
+        </div>
+        <div class="statement-footer">
+          <div>This statement is generated from live fund data and reflects the most recent portfolio valuation.</div>
+          <div>For questions and disputes, Contact the treasurer.</div>
+          <div class="statement-copyright">© 2026 JMS Holdings Fund · All rights reserved.</div>
+        </div>
+      </div>
+    </div>
+  <div class="dev-footer">
+    <div>Developed by <strong>Steven R.</strong> <span class="heart">♥</span></div>
+    <div>This is a personal project developed for personal use only.</div>
+    <div>Please do not share this with non-members. <strong>JMS Holdings Ltd. © 2026</strong> All rights reserved.</div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// CONFIGURATION
+// ============================================
+const HARDCODED_BIN_ID = "";
+const HARDCODED_API_KEY = "";
+
+const PALETTE = ["#0f766e", "#f59e0b", "#6366f1", "#dc2626", "#0891b2", "#7c3aed", "#65a30d", "#db2777"];
+let entries = [];
+let pvSnapshots = []; // Array of {date, value} for permanent PV history
+let chart = null;
+let myName = "";
+
+let BIN_ID = "";
+let API_KEY = "";
+
+const CONFIG_KEY = "jms_jsonbin_config_v2";
+const MY_NAME_KEY = "jms_member_name_v1";
+
+let fundChart = null;
+let contribChart = null;
+let memberChart = null;
+
+const debugLines = [];
+function logDebug(msg, type="info"){
+  const ts = new Date().toLocaleTimeString();
+  const line = `<span class="ts">[${ts}]</span> <span class="${type}">${escapeHtml(msg)}</span>`;
+  debugLines.push(line);
+  if(debugLines.length > 50) debugLines.shift();
+  const el = document.getElementById("debug-log");
+  if(el) el.innerHTML = debugLines.join("\n");
+  console.log(`[${ts}] ${msg}`);
+}
+
+function loadConfig(){
+  if(HARDCODED_BIN_ID && HARDCODED_API_KEY){
+    BIN_ID = HARDCODED_BIN_ID;
+    API_KEY = HARDCODED_API_KEY;
+    return true;
+  }
+  try{
+    const saved = localStorage.getItem(CONFIG_KEY);
+    if(saved){
+      const cfg = JSON.parse(saved);
+      if(cfg.binId && cfg.apiKey){
+        BIN_ID = cfg.binId;
+        API_KEY = cfg.apiKey;
+        return true;
+      }
+    }
+  }catch(e){}
+  return false;
+}
+
+function saveConfig(binId, apiKey){
+  BIN_ID = binId;
+  API_KEY = apiKey;
+  try{
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({binId, apiKey}));
+  }catch(e){}
+}
+
+function loadMyName(){
+  try{
+    const saved = localStorage.getItem(MY_NAME_KEY);
+    if(saved){
+      myName = saved;
+      document.getElementById("f-member").value = myName;
+    }
+  }catch(e){}
+}
+
+function saveMyName(name){
+  myName = name.trim();
+  try{
+    if(myName){
+      localStorage.setItem(MY_NAME_KEY, myName);
+    } else {
+      localStorage.removeItem(MY_NAME_KEY);
+    }
+  }catch(e){}
+}
+
+// ============================================
+// JSONBIN.IO API
+// ============================================
+const JSONBIN_ROOT = "https://api.jsonbin.io/v3";
+
+async function jsonbinRead(){
+  logDebug(`READ  -> ${JSONBIN_ROOT}/b/${BIN_ID}/latest`);
+  const res = await fetch(`${JSONBIN_ROOT}/b/${BIN_ID}/latest`, {
+    method: "GET",
+    headers: { "X-Master-Key": API_KEY }
+  });
+  logDebug(`READ  <- HTTP ${res.status} ${res.statusText}`);
+  if(!res.ok){
+    let errMsg = `HTTP ${res.status}`;
+    try{
+      const err = await res.json();
+      errMsg = err.message || JSON.stringify(err);
+    }catch(e){}
+    throw new Error(errMsg);
+  }
+  const data = await res.json();
+  logDebug(`READ  <- payload type: ${typeof data.record}`, "ok");
+  return data.record || data;
+}
+
+// ============================================
+// DATA LAYER
+// ============================================
+async function loadEntries(){
+  const banner = document.getElementById("status-banner");
+  const refreshBtn = document.getElementById("btn-refresh");
+  const lastSync = document.getElementById("last-sync");
+
+  if(refreshBtn) refreshBtn.disabled = true;
+
+  if(!BIN_ID || !API_KEY){
+    banner.textContent = "⚠ Not connected. Enter your Bin ID and API Key above.";
+    if(refreshBtn) refreshBtn.disabled = false;
+    render();
+    return;
+  }
+
+  try{
+    const data = await jsonbinRead();
+    if(data && typeof data === "object"){
+      if(Array.isArray(data.entries)){
+        entries = data.entries;
+        pvSnapshots = data.pvSnapshots || [];
+      } else if(Array.isArray(data)){
+        entries = data;
+        pvSnapshots = [];
+      } else {
+        entries = [];
+        pvSnapshots = [];
+      }
+    } else {
+      entries = [];
+      pvSnapshots = [];
+    }
+    banner.textContent = "";
+    if(lastSync){
+      lastSync.textContent = "Last synced: " + new Date().toLocaleTimeString();
+    }
+    logDebug("Cloud load successful", "ok");
+  }catch(e){
+    logDebug("Cloud load FAILED: " + e.message, "err");
+    banner.textContent = "⚠ Cloud load failed — " + e.message;
+  }
+
+  if(refreshBtn) refreshBtn.disabled = false;
+  render();
+}
+
+// ============================================
+// CORE LOGIC
+// ============================================
+function computeLedger(){
+  let unitsOutstanding = 0;
+  const rows = [];
+  for(const e of entries){
+    const before = unitsOutstanding;
+    let nav, unitsIssued, warning = null;
+    if(before === 0){
+      nav = 1;
+    } else if(e.pv === null || e.pv === undefined || isNaN(e.pv)){
+      warning = "Missing portfolio value";
+      nav = null;
+    } else {
+      nav = e.pv / before;
+    }
+    if(nav !== null){
+      unitsIssued = e.amount / nav;
+      unitsOutstanding = before + unitsIssued;
+    } else {
+      unitsIssued = null;
+    }
+    rows.push({...e, before, nav, unitsIssued, warning});
+  }
+  return { rows, totalUnits: unitsOutstanding };
+}
+
+function computeOwnership(rows, totalUnits){
+  const byMember = {};
+  const memberContributions = {};
+  for(const r of rows){
+    if(r.unitsIssued === null) continue;
+    byMember[r.member] = (byMember[r.member] || 0) + r.unitsIssued;
+    memberContributions[r.member] = (memberContributions[r.member] || 0) + r.amount;
+  }
+  const list = Object.entries(byMember).map(([name, units]) => ({
+    name, units, pct: totalUnits > 0 ? (units / totalUnits) * 100 : 0,
+    totalContributed: memberContributions[name] || 0
+  }));
+  list.sort((a,b) => b.units - a.units);
+  return list;
+}
+
+function getLatestPV(){
+  if(!pvSnapshots || pvSnapshots.length === 0) return null;
+  return pvSnapshots[pvSnapshots.length - 1].value;
+}
+
+function computePerformance(ownership, totalUnits){
+  const latestPV = getLatestPV();
+  if(!latestPV || latestPV <= 0 || totalUnits <= 0){
+    return null;
+  }
+  const currentNav = latestPV / totalUnits;
+  const totalContributed = ownership.reduce((sum, m) => sum + m.totalContributed, 0);
+  const totalCurrentValue = latestPV;
+  const gainLoss = totalCurrentValue - totalContributed;
+  const gainLossPct = totalContributed > 0 ? (gainLoss / totalContributed) * 100 : 0;
+
+  const memberPerf = ownership.map(m => {
+    const currentValue = m.units * currentNav;
+    const gain = currentValue - m.totalContributed;
+    const gainPct = m.totalContributed > 0 ? (gain / m.totalContributed) * 100 : 0;
+    return {...m, currentValue, gain, gainPct, currentNav};
+  });
+
+  return {totalContributed, totalCurrentValue, gainLoss, gainLossPct, currentNav, memberPerf};
+}
+
+function fmtPeso(n){
+  return "₱" + Number(n).toLocaleString("en-PH", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtUnits(n){
+  return Number(n).toLocaleString("en-PH", {minimumFractionDigits:4, maximumFractionDigits:4});
+}
+
+function render(){
+  const { rows, totalUnits } = computeLedger();
+  const ownership = computeOwnership(rows, totalUnits);
+  const perf = computePerformance(ownership, totalUnits);
+
+  const dl = document.getElementById("member-list");
+  dl.innerHTML = "";
+  const seen = new Set();
+  entries.forEach(e => {
+    if(e.member && !seen.has(e.member)){
+      seen.add(e.member);
+      const opt = document.createElement("option");
+      opt.value = e.member;
+      dl.appendChild(opt);
+    }
+  });
+
+  const tbody = document.getElementById("log-body");
+  const emptyNote = document.getElementById("empty-note");
+  tbody.innerHTML = "";
+  if(rows.length === 0){
+    emptyNote.style.display = "block";
+  } else {
+    emptyNote.style.display = "none";
+    rows.forEach((r, idx) => {
+      const tr = document.createElement("tr");
+      if(idx === rows.length - 1) tr.className = "latest";
+      const isMe = myName && r.member && r.member.toLowerCase() === myName.toLowerCase();
+      if(isMe) tr.classList.add("me-row");
+      const navText = r.warning ? `<span style="color:var(--danger)">⚠ value</span>` : (r.nav !== null ? r.nav.toFixed(4) : "—");
+      const unitsText = r.unitsIssued !== null ? fmtUnits(r.unitsIssued) : "—";
+      tr.innerHTML = `
+        <td class="mono">${r.date || "—"}</td>
+        <td>${escapeHtml(r.member)}${isMe ? '<span class="me-badge">You</span>' : ''}</td>
+        <td class="mono">${fmtPeso(r.amount)}</td>
+        <td class="mono">${r.pv !== null && r.pv !== undefined ? fmtPeso(r.pv) : "—"}</td>
+        <td class="mono">${navText}</td>
+        <td class="mono">${unitsText}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  const pvDisplay = document.getElementById("current-pv-display");
+  const perfGrid = document.getElementById("perf-grid");
+  if(perf){
+    pvDisplay.style.display = "block";
+    perfGrid.style.display = "grid";
+    document.getElementById("display-current-pv").textContent = fmtPeso(getLatestPV());
+    document.getElementById("display-current-nav").textContent = `Current NAV: ${perf.currentNav.toFixed(4)}`;
+
+    document.getElementById("perf-total-contrib").textContent = fmtPeso(perf.totalContributed);
+    document.getElementById("perf-gain-loss").textContent = (perf.gainLoss >= 0 ? "+" : "") + fmtPeso(perf.gainLoss).replace("₱", "₱");
+    document.getElementById("perf-gain-pct").textContent = (perf.gainLossPct >= 0 ? "+" : "") + perf.gainLossPct.toFixed(2) + "%";
+    document.getElementById("perf-total-units").textContent = Number(totalUnits.toFixed(2)).toLocaleString("en-PH");
+
+    const gainCard = document.getElementById("card-gain-loss");
+    const gainPctCard = document.getElementById("card-gain-pct");
+    if(perf.gainLoss >= 0){
+      gainCard.className = "perf-card gain";
+      gainPctCard.className = "perf-card gain";
+      document.getElementById("perf-gain-loss").className = "perf-value mono gain";
+      document.getElementById("perf-gain-pct").className = "perf-value mono gain";
+    } else {
+      gainCard.className = "perf-card loss";
+      gainPctCard.className = "perf-card loss";
+      document.getElementById("perf-gain-loss").className = "perf-value mono loss";
+      document.getElementById("perf-gain-pct").className = "perf-value mono loss";
+    }
+  } else {
+    pvDisplay.style.display = "none";
+    perfGrid.style.display = "none";
+  }
+
+  const meCard = document.getElementById("me-card");
+  const meData = perf ? perf.memberPerf.find(m => myName && m.name.toLowerCase() === myName.toLowerCase()) : null;
+  if(meData){
+    meCard.classList.add("visible");
+    document.getElementById("me-total-contrib").textContent = fmtPeso(meData.totalContributed);
+    document.getElementById("me-current-value").textContent = fmtPeso(meData.currentValue);
+    document.getElementById("me-units").textContent = fmtUnits(meData.units);
+    document.getElementById("me-pct").textContent = meData.pct.toFixed(2) + "%";
+    document.getElementById("me-gain-loss").textContent = (meData.gain >= 0 ? "+" : "") + fmtPeso(meData.gain).replace("₱", "₱");
+    document.getElementById("me-gain-pct").textContent = (meData.gainPct >= 0 ? "+" : "") + meData.gainPct.toFixed(2) + "%";
+
+    const gainEl = document.getElementById("me-gain-loss");
+    const gainPctEl = document.getElementById("me-gain-pct");
+    if(meData.gain >= 0){
+      gainEl.className = "me-stat-value mono gain";
+      gainPctEl.className = "me-stat-value mono gain";
+    } else {
+      gainEl.className = "me-stat-value mono loss";
+      gainPctEl.className = "me-stat-value mono loss";
+    }
+  } else {
+    meCard.classList.remove("visible");
+  }
+
+  document.getElementById("total-units-label").textContent = totalUnits > 0 ? Number(totalUnits.toFixed(2)).toLocaleString("en-PH") : "0";
+
+  const ledgerList = document.getElementById("ledger-list");
+  ledgerList.innerHTML = "";
+  if(ownership.length === 0){
+    ledgerList.innerHTML = `<div class="empty-note">Ownership shares will appear here once contributions are logged.</div>`;
+  } else {
+    ownership.forEach((m, i) => {
+      const color = PALETTE[i % PALETTE.length];
+      const isMe = myName && m.name.toLowerCase() === myName.toLowerCase();
+      const row = document.createElement("div");
+      row.className = "ledger-row" + (isMe ? " me" : "");
+      let gainHtml = "";
+      if(perf){
+        const mp = perf.memberPerf.find(x => x.name === m.name);
+        if(mp){
+          const isGain = mp.gain >= 0;
+          gainHtml = `<span class="ledger-gain ${isGain ? 'up' : 'down'}">${isGain ? '+' : ''}${fmtPeso(mp.gain).replace('₱','')} (${isGain ? '+' : ''}${mp.gainPct.toFixed(2)}%)</span>`;
+        }
+      }
+      row.innerHTML = `
+        <span class="swatch ${isMe ? 'me-ring' : ''}" style="background:${color}"></span>
+        <span class="ledger-name ${isMe ? 'me-name' : ''}">${escapeHtml(m.name)}${isMe ? '<span class="me-badge">You</span>' : ''}</span>
+        <span class="ledger-pct">${m.pct.toFixed(2)}%</span>
+        <span class="ledger-units mono">${fmtUnits(m.units)} u</span>
+        ${gainHtml}
+      `;
+      ledgerList.appendChild(row);
+    });
+  }
+
+  const warnRows = rows.filter(r => r.warning);
+  const banner = document.getElementById("status-banner");
+  if(!banner.textContent.startsWith("⚠ Cloud")){
+    banner.textContent = warnRows.length > 0
+      ? `⚠ ${warnRows.length} entr${warnRows.length>1?"ies":"y"} missing a Portfolio Value — units for those rows are not counted above.`
+      : "";
+  }
+
+  const ctx = document.getElementById("pie-chart").getContext("2d");
+  const data = {
+    labels: ownership.map(m => m.name),
+    datasets: [{
+      data: ownership.map(m => m.units),
+      backgroundColor: ownership.map((m, i) => {
+        const isMe = myName && m.name.toLowerCase() === myName.toLowerCase();
+        return isMe ? PALETTE[i % PALETTE.length] : PALETTE[i % PALETTE.length] + "CC";
+      }),
+      borderColor: ownership.map((m, i) => {
+        const isMe = myName && m.name.toLowerCase() === myName.toLowerCase();
+        return isMe ? PALETTE[i % PALETTE.length] : "#ffffff";
+      }),
+      borderWidth: ownership.map((m, i) => {
+        const isMe = myName && m.name.toLowerCase() === myName.toLowerCase();
+        return isMe ? 6 : 3;
+      }),
+      hoverBorderWidth: ownership.map((m, i) => {
+        const isMe = myName && m.name.toLowerCase() === myName.toLowerCase();
+        return isMe ? 8 : 4;
+      }),
+    }]
+  };
+  if(chart){
+    chart.data = data;
+    chart.update();
+  } else {
+    chart = new Chart(ctx, {
+      type: "doughnut",
+      data,
+      options: {
+        cutout: "68%",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                const pct = total > 0 ? (ctx.parsed/total*100).toFixed(2) : "0.00";
+                return ` ${ctx.label}: ${pct}%`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = s || "";
+  return d.innerHTML;
+}
+
+// ============================================
+// ANALYTICS - FUND METRICS
+// ============================================
+function buildFundHistory(){
+  const { rows } = computeLedger();
+  if(rows.length === 0) return [];
+
+  const history = [];
+  let cumulativeContrib = 0;
+
+  for(const r of rows){
+    if(r.nav === null) continue;
+    cumulativeContrib += r.amount;
+    history.push({
+      date: r.date,
+      nav: r.nav,
+      fundValue: r.pv || cumulativeContrib,
+      cumulativeContrib: cumulativeContrib,
+      totalUnits: r.before + (r.unitsIssued || 0)
+    });
+  }
+
+  // Add PV snapshot points - each snapshot is a real data point on its date
+  if(pvSnapshots.length > 0 && history.length > 0){
+    const lastEntry = history[history.length - 1];
+    for(const snap of pvSnapshots){
+      if(snap.date >= lastEntry.date){
+        const currentNav = lastEntry.totalUnits > 0 ? snap.value / lastEntry.totalUnits : 1;
+        history.push({
+          date: snap.date,
+          nav: currentNav,
+          fundValue: snap.value,
+          cumulativeContrib: lastEntry.cumulativeContrib,
+          totalUnits: lastEntry.totalUnits
+        });
+      }
+    }
+  }
+
+  return history;
+}
+
+function renderFundAnalytics(){
+  const history = buildFundHistory();
+
+  if(history.length === 0){
+    document.getElementById("fund-chart-wrap").innerHTML = '<div class="no-data" style="min-width:600px;">No contribution data yet. Log entries to see charts.</div>';
+    document.getElementById("contrib-chart-wrap").innerHTML = '<div class="no-data" style="min-width:600px;">No contribution data yet.</div>';
+    document.getElementById("ms-first-date").textContent = "—";
+    document.getElementById("ms-highest-nav").textContent = "—";
+    document.getElementById("ms-lowest-nav").textContent = "—";
+    document.getElementById("ms-total-contrib").textContent = "—";
+    return;
+  }
+
+  const navs = history.map(h => h.nav).filter(n => n > 0);
+  const totalContrib = history[history.length - 1].cumulativeContrib;
+  document.getElementById("ms-first-date").textContent = history[0].date;
+  document.getElementById("ms-highest-nav").textContent = navs.length > 0 ? Math.max(...navs).toFixed(4) : "—";
+  document.getElementById("ms-lowest-nav").textContent = navs.length > 0 ? Math.min(...navs).toFixed(4) : "—";
+  document.getElementById("ms-total-contrib").textContent = "₱" + totalContrib.toLocaleString("en-PH", {minimumFractionDigits:0, maximumFractionDigits:0});
+
+  const labels = history.map(h => h.date);
+  const navData = history.map(h => h.nav);
+  const valueData = history.map(h => h.fundValue);
+
+  const ctx1 = document.getElementById("fund-chart").getContext("2d");
+  if(fundChart) fundChart.destroy();
+
+  fundChart = new Chart(ctx1, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "NAV per Unit",
+          data: navData,
+          borderColor: "#0f766e",
+          backgroundColor: "rgba(15, 118, 110, 0.08)",
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          yAxisID: "y",
+          pointRadius: 4,
+          pointBackgroundColor: "#0f766e",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+        },
+        {
+          label: "Fund Value (₱)",
+          data: valueData,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.06)",
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          yAxisID: "y1",
+          pointRadius: 4,
+          pointBackgroundColor: "#f59e0b",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#1e293b",
+          titleColor: "#f1f5f9",
+          bodyColor: "#e2e8f0",
+          borderColor: "#334155",
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: (ctx) => {
+              if(ctx.dataset.label === "NAV per Unit"){
+                return ` NAV: ${ctx.parsed.y.toFixed(4)}`;
+              }
+              return ` Fund Value: ₱${ctx.parsed.y.toLocaleString("en-PH", {minimumFractionDigits:2})}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false, drawBorder: false },
+          ticks: { color: "#64748b", font: { size: 11 } }
+        },
+        y: {
+          type: "linear",
+          display: true,
+          position: "left",
+          grid: { color: "#e2e8f0", drawBorder: false },
+          ticks: { color: "#0f766e", font: { size: 11 }, callback: (v) => v.toFixed(2) },
+          title: { display: true, text: "NAV", color: "#0f766e", font: { size: 10, weight: "bold" } }
+        },
+        y1: {
+          type: "linear",
+          display: true,
+          position: "right",
+          grid: { display: false },
+          ticks: { color: "#f59e0b", font: { size: 11 }, callback: (v) => "₱" + (v >= 1000 ? (v/1000).toFixed(1) + "k" : v.toFixed(0)) },
+          title: { display: true, text: "Value", color: "#f59e0b", font: { size: 10, weight: "bold" } }
+        }
+      }
+    }
+  });
+
+  const contribData = history.map(h => h.cumulativeContrib);
+
+  const ctx2 = document.getElementById("contrib-chart").getContext("2d");
+  if(contribChart) contribChart.destroy();
+
+  contribChart = new Chart(ctx2, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "Cumulative Contributions",
+          data: contribData,
+          borderColor: "#0ea5e9",
+          backgroundColor: "rgba(14, 165, 233, 0.08)",
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: "#0ea5e9",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+        },
+        {
+          label: "Fund Value",
+          data: valueData,
+          borderColor: "#8b5cf6",
+          backgroundColor: "rgba(139, 92, 246, 0.06)",
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: "#8b5cf6",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#1e293b",
+          titleColor: "#f1f5f9",
+          bodyColor: "#e2e8f0",
+          borderColor: "#334155",
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: (ctx) => ` ${ctx.dataset.label}: ₱${ctx.parsed.y.toLocaleString("en-PH", {minimumFractionDigits:2})}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false, drawBorder: false },
+          ticks: { color: "#64748b", font: { size: 11 } }
+        },
+        y: {
+          grid: { color: "#e2e8f0", drawBorder: false },
+          ticks: { color: "#64748b", font: { size: 11 }, callback: (v) => "₱" + (v >= 1000 ? (v/1000).toFixed(1) + "k" : v.toFixed(0)) }
+        }
+      }
+    }
+  });
+}
+
+// ============================================
+// ANALYTICS - MEMBER METRICS
+// ============================================
+function buildMemberHistory(memberName){
+  const { rows } = computeLedger();
+  if(rows.length === 0) return [];
+
+  const memberRows = [];
+  let memberTotalContrib = 0;
+  let memberTotalUnits = 0;
+
+  for(const r of rows){
+    if(r.nav === null) continue;
+
+    if(r.member === memberName){
+      memberTotalContrib += r.amount;
+      memberTotalUnits += r.unitsIssued || 0;
+      const avgCost = memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0;
+
+      memberRows.push({
+        date: r.date,
+        amount: r.amount,
+        fundNav: r.nav,
+        unitsIssued: r.unitsIssued,
+        memberTotalContrib: memberTotalContrib,
+        memberTotalUnits: memberTotalUnits,
+        avgCost: avgCost,
+        shareValue: memberTotalUnits * r.nav
+      });
+    } else {
+      if(memberTotalUnits > 0){
+        memberRows.push({
+          date: r.date,
+          amount: 0,
+          fundNav: r.nav,
+          unitsIssued: 0,
+          memberTotalContrib: memberTotalContrib,
+          memberTotalUnits: memberTotalUnits,
+          avgCost: memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0,
+          shareValue: memberTotalUnits * r.nav
+        });
+      }
+    }
+  }
+
+  // Add PV snapshot points
+  if(pvSnapshots.length > 0 && memberTotalUnits > 0){
+    const { totalUnits } = computeLedger();
+    const lastEntryDate = memberRows.length > 0 ? memberRows[memberRows.length - 1].date : null;
+    for(const snap of pvSnapshots){
+      if(lastEntryDate && snap.date < lastEntryDate) continue;
+      const currentNav = totalUnits > 0 ? snap.value / totalUnits : 1;
+      memberRows.push({
+        date: snap.date,
+        amount: 0,
+        fundNav: currentNav,
+        unitsIssued: 0,
+        memberTotalContrib: memberTotalContrib,
+        memberTotalUnits: memberTotalUnits,
+        avgCost: memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0,
+        shareValue: memberTotalUnits * currentNav
+      });
+    }
+  }
+
+  return memberRows;
+}
+
+function populateMemberSelector(){
+  const select = document.getElementById("member-select");
+  const currentVal = select.value;
+
+  const members = [...new Set(entries.map(e => e.member).filter(m => m))];
+  members.sort();
+
+  select.innerHTML = '<option value="">Choose a member...</option>';
+  members.forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    select.appendChild(opt);
+  });
+
+  if(currentVal && members.includes(currentVal)){
+    select.value = currentVal;
+  }
+}
+
+function renderMemberAnalytics(){
+  const select = document.getElementById("member-select");
+  const memberName = select.value;
+
+  if(!memberName){
+    document.getElementById("member-content").style.display = "none";
+    document.getElementById("member-no-data").style.display = "block";
+    return;
+  }
+
+  document.getElementById("member-content").style.display = "block";
+  document.getElementById("member-no-data").style.display = "none";
+
+  const history = buildMemberHistory(memberName);
+
+  if(history.length === 0){
+    document.getElementById("member-chart-wrap").innerHTML = '<div class="no-data" style="min-width:600px;">No data for this member.</div>';
+    return;
+  }
+
+  const latest = history[history.length - 1];
+  const totalReturn = latest.memberTotalContrib > 0 ? ((latest.shareValue - latest.memberTotalContrib) / latest.memberTotalContrib) * 100 : 0;
+
+  const snapContrib = document.getElementById("snap-contributed");
+  const snapCurrent = document.getElementById("snap-current");
+  const snapReturn = document.getElementById("snap-return");
+
+  snapContrib.textContent = fmtPeso(latest.memberTotalContrib);
+  snapCurrent.textContent = fmtPeso(latest.shareValue);
+  snapReturn.textContent = (totalReturn >= 0 ? "+" : "") + totalReturn.toFixed(2) + "%";
+  snapReturn.className = "value mono " + (totalReturn >= 0 ? "gain" : "loss");
+
+  const labels = history.map(h => h.date);
+  const avgCostData = history.map(h => h.avgCost);
+  const shareValueData = history.map(h => h.shareValue);
+
+  const wrap = document.getElementById("member-chart-wrap");
+  if(!document.getElementById("member-chart")){
+    wrap.innerHTML = '<canvas id="member-chart" style="min-width:600px;"></canvas>';
+  }
+
+  const ctx = document.getElementById("member-chart").getContext("2d");
+  if(memberChart) memberChart.destroy();
+
+  memberChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "Avg Cost (NAV)",
+          data: avgCostData,
+          borderColor: "#0f766e",
+          backgroundColor: "rgba(15, 118, 110, 0.08)",
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          yAxisID: "y",
+          pointRadius: 3,
+          pointBackgroundColor: "#0f766e",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+        },
+        {
+          label: "Share Value",
+          data: shareValueData,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.06)",
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          yAxisID: "y1",
+          pointRadius: 3,
+          pointBackgroundColor: "#f59e0b",
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#1e293b",
+          titleColor: "#f1f5f9",
+          bodyColor: "#e2e8f0",
+          borderColor: "#334155",
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: (ctx) => {
+              if(ctx.dataset.label === "Avg Cost (NAV)"){
+                return ` Avg Cost: ${ctx.parsed.y.toFixed(4)}`;
+              }
+              return ` Share Value: ₱${ctx.parsed.y.toLocaleString("en-PH", {minimumFractionDigits:2})}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false, drawBorder: false },
+          ticks: { color: "#64748b", font: { size: 11 } }
+        },
+        y: {
+          type: "linear",
+          display: true,
+          position: "left",
+          grid: { color: "#e2e8f0", drawBorder: false },
+          ticks: { color: "#0f766e", font: { size: 11 }, callback: (v) => v.toFixed(2) },
+          title: { display: true, text: "Avg Cost", color: "#0f766e", font: { size: 10, weight: "bold" } }
+        },
+        y1: {
+          type: "linear",
+          display: true,
+          position: "right",
+          grid: { display: false },
+          ticks: { color: "#f59e0b", font: { size: 11 }, callback: (v) => "₱" + (v >= 1000 ? (v/1000).toFixed(1) + "k" : v.toFixed(0)) },
+          title: { display: true, text: "Value", color: "#f59e0b", font: { size: 10, weight: "bold" } }
+        }
+      }
+    }
+  });
+
+  const tbody = document.getElementById("member-history-body");
+  tbody.innerHTML = "";
+
+  history.filter(h => h.amount > 0).forEach(h => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="mono">${h.date}</td>
+      <td class="mono">${fmtPeso(h.amount)}</td>
+      <td class="mono">${h.fundNav.toFixed(4)}</td>
+      <td class="mono">${fmtUnits(h.unitsIssued)}</td>
+      <td class="mono">${h.avgCost.toFixed(4)}</td>
+      <td class="mono">${fmtPeso(h.shareValue)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ============================================
+// SETUP PANEL HANDLERS
+// ============================================
+function updateConfigUI(){
+  const panel = document.getElementById("config-panel");
+  const ok = document.getElementById("config-ok");
+  const binDisplay = document.getElementById("bin-id-display");
+  const refreshBar = document.getElementById("refresh-bar");
+  const debugPanel = document.getElementById("debug-panel");
+
+  if(BIN_ID && API_KEY){
+    panel.style.display = "none";
+    ok.classList.add("visible");
+    binDisplay.style.display = "block";
+    binDisplay.innerHTML = `<strong>Connected to Bin:</strong> ${BIN_ID}<br><span style="font-size:11px;color:#6b7280;">Data refreshes automatically on load. Use Refresh to get the latest.</span>`;
+    if(refreshBar) refreshBar.style.display = "flex";
+    if(debugPanel) debugPanel.style.display = "block";
+  } else {
+    panel.style.display = "block";
+    ok.classList.remove("visible");
+    binDisplay.style.display = "none";
+    if(refreshBar) refreshBar.style.display = "none";
+    if(debugPanel) debugPanel.style.display = "none";
+  }
+}
+
+async function connectToExistingBin(){
+  const apiKey = document.getElementById("cfg-api-key").value.trim();
+  const binId = document.getElementById("cfg-bin-id").value.trim();
+  const status = document.getElementById("cfg-status");
+  status.className = "";
+
+  if(!apiKey){
+    status.className = "err";
+    status.textContent = "Please paste your X-Master-Key.";
+    return;
+  }
+  if(!binId){
+    status.className = "err";
+    status.textContent = "Please enter a Bin ID.";
+    return;
+  }
+
+  BIN_ID = binId;
+  API_KEY = apiKey;
+  status.textContent = "Testing connection...";
+  logDebug("Connecting to existing bin: " + binId);
+
+  try{
+    const data = await jsonbinRead();
+    if(data && typeof data === "object"){
+      if(Array.isArray(data.entries)){
+        entries = data.entries;
+        pvSnapshots = data.pvSnapshots || [];
+      } else if(Array.isArray(data)){
+        entries = data;
+        pvSnapshots = [];
+      } else {
+        entries = [];
+        pvSnapshots = [];
+      }
+    } else {
+      entries = [];
+      pvSnapshots = [];
+    }
+    saveConfig(BIN_ID, API_KEY);
+    status.className = "ok";
+    status.textContent = "Connected successfully! Data loaded.";
+    logDebug("Connected! Loaded " + entries.length + " entries", "ok");
+    updateConfigUI();
+    render();
+  }catch(e){
+    logDebug("Connect FAILED: " + e.message, "err");
+    BIN_ID = "";
+    API_KEY = "";
+    status.className = "err";
+    status.textContent = "Connection failed: " + e.message;
+  }
+}
+
+document.getElementById("cfg-connect-btn").addEventListener("click", connectToExistingBin);
+document.getElementById("btn-refresh").addEventListener("click", loadEntries);
+document.getElementById("f-member").addEventListener("input", (e) => {
+  saveMyName(e.target.value);
+  render();
+});
+document.getElementById("btn-toggle-debug").addEventListener("click", () => {
+  const el = document.getElementById("debug-log");
+  el.style.display = el.style.display === "none" ? "block" : "none";
+});
+
+// ============================================
+// TAB NAVIGATION
+// ============================================
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.getAttribute("data-tab")).classList.add("active");
+
+    if(btn.getAttribute("data-tab") === "analytics"){
+      renderFundAnalytics();
+      populateMemberSelector();
+      const memberSelect = document.getElementById("member-select");
+      if(memberSelect.value){
+        renderMemberAnalytics();
+      }
+    }
+  });
+});
+
+document.querySelectorAll(".sub-tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".sub-tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".sub-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("subtab-" + btn.getAttribute("data-subtab")).classList.add("active");
+
+    if(btn.getAttribute("data-subtab") === "fund"){
+      renderFundAnalytics();
+    } else {
+      populateMemberSelector();
+      if(document.getElementById("member-select").value){
+        renderMemberAnalytics();
+      }
+    }
+  });
+});
+
+document.getElementById("member-select").addEventListener("change", () => {
+  renderMemberAnalytics();
+  const select = document.getElementById("member-select");
+  const btn = document.getElementById("btn-print-statement");
+  if(select.value){
+    btn.style.display = "inline-block";
+  } else {
+    btn.style.display = "none";
+  }
+});
+
+// ============================================
+// PRINT STATEMENT
+// ============================================
+function generateMemberStatement(){
+  const select = document.getElementById("member-select");
+  const memberName = select.value;
+  if(!memberName) return;
+
+  const { rows, totalUnits } = computeLedger();
+  const perf = computePerformance(computeOwnership(rows, totalUnits), totalUnits);
+  const history = buildMemberHistory(memberName);
+
+  if(history.length === 0) return;
+
+  const latest = history[history.length - 1];
+  const totalReturn = latest.memberTotalContrib > 0 ? ((latest.shareValue - latest.memberTotalContrib) / latest.memberTotalContrib) * 100 : 0;
+
+  // Find first contribution date for period
+  const firstDate = history.find(h => h.amount > 0)?.date || "—";
+  const today = new Date().toLocaleDateString("en-PH", {year:"numeric", month:"long", day:"numeric"});
+
+  // Populate statement
+  document.getElementById("stmt-name").textContent = memberName;
+  document.getElementById("stmt-period").textContent = firstDate + " – Present";
+  document.getElementById("stmt-date").textContent = today;
+
+  const currentNav = perf ? perf.currentNav.toFixed(4) : "—";
+  const fundValue = perf ? fmtPeso(perf.totalCurrentValue) : "—";
+  document.getElementById("stmt-nav").textContent = currentNav;
+  document.getElementById("stmt-fund-value").textContent = fundValue;
+
+  document.getElementById("stmt-contrib").textContent = fmtPeso(latest.memberTotalContrib);
+  document.getElementById("stmt-units").textContent = fmtUnits(latest.memberTotalUnits);
+  document.getElementById("stmt-pct").textContent = totalUnits > 0 ? ((latest.memberTotalUnits / totalUnits) * 100).toFixed(2) + "%" : "—";
+  document.getElementById("stmt-current").textContent = fmtPeso(latest.shareValue);
+
+  const gain = latest.shareValue - latest.memberTotalContrib;
+  const gainEl = document.getElementById("stmt-gain");
+  gainEl.textContent = (gain >= 0 ? "+" : "") + fmtPeso(gain);
+  gainEl.style.color = gain >= 0 ? "#16a34a" : "#dc2626";
+
+  const retEl = document.getElementById("stmt-return");
+  retEl.textContent = (totalReturn >= 0 ? "+" : "") + totalReturn.toFixed(2) + "%";
+  retEl.style.color = totalReturn >= 0 ? "#16a34a" : "#dc2626";
+
+  // Populate history table
+  const tbody = document.getElementById("stmt-history-body");
+  tbody.innerHTML = "";
+  history.filter(h => h.amount > 0).forEach(h => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="mono">${h.date}</td>
+      <td class="mono">${fmtPeso(h.amount)}</td>
+      <td class="mono">${h.fundNav.toFixed(4)}</td>
+      <td class="mono">${fmtUnits(h.unitsIssued)}</td>
+      <td class="mono">${h.avgCost.toFixed(4)}</td>
+      <td class="mono">${fmtPeso(h.shareValue)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Show and print
+  const view = document.getElementById("print-statement-view");
+  view.style.display = "block";
+  window.print();
+  setTimeout(() => { view.style.display = "none"; }, 500);
+}
+
+document.getElementById("btn-print-statement").addEventListener("click", generateMemberStatement);
+
+// ============================================
+// INIT
+// ============================================
+const hasConfig = loadConfig();
+loadMyName();
+updateConfigUI();
+if(hasConfig){
+  loadEntries();
+} else {
+  render();
+}
+</script>
+
+</body>
+</html>  .status-banner{font-size:12px;color:var(--danger);text-align:center;padding:8px 0 0;font-weight:600;}
+
+  .config-panel{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:12.5px;}
+  .config-panel label{font-size:11px;margin-bottom:4px;}
+  .config-panel input{font-size:12px;padding:8px 10px;}
+  .config-panel .field-row{margin-bottom:8px;}
+  .config-panel .field-row:last-child{margin-bottom:0;}
+  .btn-connect{background:var(--primary);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700;margin-top:6px;width:100%;}
+  .btn-connect:hover{background:var(--primary-dark);}
+  .config-status{font-size:11.5px;margin-top:6px;min-height:16px;}
+  .config-status.ok{color:var(--primary-dark);}
+  .config-status.err{color:var(--danger);}
+  .config-ok{display:none;align-items:center;gap:6px;color:var(--primary-dark);font-weight:600;font-size:12px;margin-bottom:10px;}
+  .config-ok.visible{display:flex;}
+  .bin-id-display{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:12px;color:#14532d;margin-top:8px;word-break:break-all;}
+  .bin-id-display strong{color:#0f766e;}
+
+  .refresh-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+  .last-sync{font-size:11px;color:var(--ink-soft);}
+  .btn-refresh{background:var(--bg);border:1.5px solid var(--line);color:var(--ink-soft);padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;}
+  .btn-refresh:hover{border-color:var(--primary);color:var(--primary);}
+  .btn-refresh:disabled{opacity:0.5;cursor:not-allowed;}
+
+  .me-card{background:var(--me-bg);border:1.5px solid var(--me-border);border-radius:12px;padding:16px;margin-bottom:18px;display:none;}
+  .me-card.visible{display:block;}
+  .me-card h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--me-text);margin:0 0 12px;font-weight:700;}
+  .me-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .me-stat{text-align:center;}
+  .me-stat-value{font-size:16px;font-weight:800;color:var(--me-text);}
+  .me-stat-value.gain{color:var(--success);}
+  .me-stat-value.loss{color:var(--loss);}
+  .me-stat-label{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+
+  .debug-panel{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:16px;font-size:12px;}
+  .debug-panel h3{font-size:12px;margin:0 0 10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
+  .debug-log{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px 12px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;line-height:1.5;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+  .debug-log .ts{color:#94a3b8;}
+  .debug-log .err{color:#f87171;}
+  .debug-log .ok{color:#4ade80;}
+  .debug-log .warn{color:#fbbf24;}
+  .btn-tool{background:var(--bg);border:1.5px solid var(--line);color:var(--ink);padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+  .btn-tool:hover{border-color:var(--primary);color:var(--primary);}
+
+  .analytics-panel{background:var(--an-card);border-radius:var(--radius);box-shadow:0 1px 2px rgba(16,24,40,0.04),0 1px 8px rgba(16,24,40,0.05);padding:22px;}
+  .analytics-panel h2{font-size:16px;color:var(--an-ink);margin:0 0 18px;font-weight:700;}
+  .analytics-panel h3{font-size:13px;color:var(--an-ink-soft);margin:0 0 10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .chart-card{background:var(--an-bg);border:1.5px solid var(--an-line);border-radius:12px;padding:18px;margin-bottom:18px;}
+  .chart-card .chart-title{font-size:14px;font-weight:700;color:var(--an-ink);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  .chart-card .chart-title .dot{width:8px;height:8px;border-radius:50%;}
+  .chart-area{position:relative;height:280px;width:100%;}
+  .chart-area.small{height:220px;}
+  /* Scrollable chart containers — fixed viewport, horizontal scroll as data grows */
+  .chart-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;border-radius:8px;}
+  .chart-scroll::-webkit-scrollbar{height:6px;}
+  .chart-scroll::-webkit-scrollbar-track{background:var(--an-bg);border-radius:10px;}
+  .chart-scroll::-webkit-scrollbar-thumb{background:var(--an-line);border-radius:10px;}
+  .chart-scroll::-webkit-scrollbar-thumb:hover{background:var(--an-ink-soft);}
+  .chart-scroll canvas{min-width:600px;}
+  .milestone-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;}
+  @media(max-width:640px){.milestone-grid{grid-template-columns:repeat(2,1fr);}}
+  .milestone-card{background:var(--an-bg);border:1.5px solid var(--an-line);border-radius:10px;padding:14px;text-align:center;}
+  .milestone-card .value{font-size:18px;font-weight:800;color:var(--an-teal);font-family:ui-monospace,"SF Mono",monospace;}
+  .milestone-card .label{font-size:10px;color:var(--an-ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-top:4px;font-weight:600;}
+  .member-selector{margin-bottom:16px;}
+  .member-selector select{background:var(--an-bg);border:1.5px solid var(--an-line);border-radius:10px;padding:10px 14px;font-size:14px;font-weight:600;color:var(--an-ink);width:100%;max-width:300px;}
+  .member-selector select:focus{outline:none;border-color:var(--an-teal);}
+  .member-snapshot{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+  @media(max-width:640px){.member-snapshot{grid-template-columns:1fr;}}
+  .snapshot-card{background:var(--an-bg);border:1.5px solid var(--an-line);border-radius:10px;padding:16px;text-align:center;}
+  .snapshot-card .value{font-size:22px;font-weight:800;color:var(--an-teal);font-family:ui-monospace,"SF Mono",monospace;}
+  .snapshot-card .value.gain{color:var(--success);}
+  .snapshot-card .value.loss{color:var(--loss);}
+  .snapshot-card .label{font-size:10px;color:var(--an-ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-top:4px;font-weight:600;}
+  .member-history-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:12px;}
+  .member-history-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--an-ink-soft);border-bottom:2px solid var(--an-line);padding:8px 6px;font-weight:700;background:var(--an-bg);}
+  .member-history-table td{padding:8px 6px;border-bottom:1px solid var(--an-line);vertical-align:top;}
+  .member-history-table tr:last-child td{border-bottom:none;}
+  .legend-inline{display:flex;gap:16px;margin-bottom:10px;font-size:12px;}
+  .legend-inline .item{display:flex;align-items:center;gap:6px;}
+  .legend-inline .dot{width:10px;height:10px;border-radius:50%;}
+  .no-data{text-align:center;padding:40px 20px;color:var(--an-ink-soft);font-size:14px;}
+  .no-data svg{width:48px;height:48px;margin-bottom:12px;opacity:.4;}
+
+  .session-notice{background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 14px;font-size:12px;color:#92400e;line-height:1.5;margin-bottom:18px;}
+  .session-notice strong{color:#92400e;}
+  .dev-footer{text-align:center;padding:30px 16px 20px;font-size:11px;color:var(--ink-soft);line-height:1.6;}
+  .dev-footer .heart{color:#dc2626;}
+
+  /* Print Statement Styles */
+  .btn-print{background:var(--an-bg);border:1.5px solid var(--an-line);color:var(--an-ink);padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:18px;transition:all .15s;}
+  .btn-print:hover{border-color:var(--an-teal);color:var(--an-teal);background:#e6f4f2;}
+
+  #print-statement-view{position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9999;overflow-y:auto;padding:0;}
+  .statement-page{max-width:680px;margin:0 auto;padding:50px 40px;background:#fff;color:#1a1a1a;font-family:"Inter",ui-sans-serif,"Segoe UI",system-ui,sans-serif;}
+  .statement-header{text-align:center;border-bottom:2px solid #1a1a1a;padding-bottom:20px;margin-bottom:24px;}
+  .statement-title{font-size:22px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#1a1a1a;margin-bottom:4px;}
+  .statement-subtitle{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#555;margin-top:6px;}
+  .statement-meta{margin-bottom:28px;font-size:13px;line-height:2;color:#333;}
+  .statement-meta strong{color:#1a1a1a;font-weight:700;}
+  .statement-meta span{color:#444;}
+  .statement-section{margin-bottom:28px;}
+  .statement-section-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#666;border-bottom:1px solid #ddd;padding-bottom:6px;margin-bottom:12px;}
+  .statement-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:13.5px;border-bottom:1px dotted #e0e0e0;}
+  .statement-row:last-child{border-bottom:none;}
+  .statement-row span:first-child{color:#555;}
+  .statement-row span:last-child{font-weight:700;color:#1a1a1a;}
+  .statement-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;}
+  .statement-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#666;border-bottom:1.5px solid #333;padding:8px 4px;font-weight:700;}
+  .statement-table td{padding:8px 4px;border-bottom:1px solid #e8e8e8;text-align:left;}
+  .statement-table tr:last-child td{border-bottom:none;}
+  .statement-footer{text-align:center;margin-top:40px;padding-top:20px;border-top:1px solid #ddd;font-size:11px;color:#888;line-height:1.8;}
+  .statement-copyright{margin-top:12px;font-size:10px;color:#aaa;}
+
+  @media print{
+    body *{visibility:hidden;}
+    #print-statement-view,#print-statement-view *{visibility:visible;}
+    #print-statement-view{position:absolute;left:0;top:0;width:100%;display:block !important;}
+    .statement-page{padding:30px 20px;}
+  }
 </style>
 </head>
 <body>
