@@ -315,7 +315,10 @@
         <div class="empty-note" id="empty-note">No contributions logged yet — ask the treasurer to add entries.</div>
         <div class="debug-panel" id="debug-panel" style="display:none;">
           <h3>🐛 Debug Log</h3>
-          <button class="btn-tool" id="btn-toggle-debug" style="margin-bottom:10px;">Show/Hide Log</button>
+          <div class="tool-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+            <button class="btn-tool" id="btn-toggle-debug">Show/Hide Log</button>
+            <button class="btn-tool" id="btn-cache-stats">📊 Cache Stats</button>
+          </div>
           <div class="debug-log" id="debug-log" style="display:none;"></div>
         </div>
       </section>
@@ -617,6 +620,7 @@ async function loadEntries(){
     if(lastSync){
       lastSync.textContent = "Last synced: " + new Date().toLocaleTimeString();
     }
+    invalidateCache("all");
     logDebug("Cloud load successful", "ok");
   }catch(e){
     logDebug("Cloud load FAILED: " + e.message, "err");
@@ -628,9 +632,69 @@ async function loadEntries(){
 }
 
 // ============================================
+// MULTI-LEVEL CACHE
+// ============================================
+const _CACHE = {
+  ledger:    { key: null, data: null, hits: 0, misses: 0 },
+  fundHist:  { key: null, data: null, hits: 0, misses: 0 },
+  memberHist:{},  // keyed by "memberName|entriesKey|pvKey"
+  perf:      { key: null, data: null, hits: 0, misses: 0 },
+};
+
+function _entriesKey(){
+  if(entries.length === 0) return "empty";
+  const last = entries[entries.length - 1];
+  return `${entries.length}|${last.date || ""}|${last.amount || 0}|${last.member || ""}`;
+}
+
+function _pvKey(){
+  if(!pvSnapshots || pvSnapshots.length === 0) return "no-pv";
+  const last = pvSnapshots[pvSnapshots.length - 1];
+  return `${pvSnapshots.length}|${last.date || ""}|${last.value || 0}`;
+}
+
+function _fullKey(){ return _entriesKey() + "||" + _pvKey(); }
+
+function _cacheHit(level, key){
+  if(_CACHE[level].key === key){
+    _CACHE[level].hits++;
+    return _CACHE[level].data;
+  }
+  return null;
+}
+function _cacheSet(level, key, data){
+  _CACHE[level].key = key;
+  _CACHE[level].data = data;
+  _CACHE[level].misses++;
+}
+
+function invalidateCache(level){
+  if(level === "all" || level === "ledger"){
+    _CACHE.ledger.key = null; _CACHE.ledger.data = null;
+  }
+  if(level === "all" || level === "fundHist"){
+    _CACHE.fundHist.key = null; _CACHE.fundHist.data = null;
+  }
+  if(level === "all" || level === "memberHist"){
+    _CACHE.memberHist = {};
+  }
+  if(level === "all" || level === "perf"){
+    _CACHE.perf.key = null; _CACHE.perf.data = null;
+  }
+  logDebug(`Cache invalidated: ${level}`, "warn");
+}
+
+// ============================================
 // CORE LOGIC
 // ============================================
 function computeLedger(){
+  const key = _entriesKey();
+  const cached = _cacheHit("ledger", key);
+  if(cached){
+    logDebug("CACHE HIT: computeLedger", "ok");
+    return cached;
+  }
+
   let unitsOutstanding = 0;
   const rows = [];
   for(const e of entries){
@@ -652,7 +716,10 @@ function computeLedger(){
     }
     rows.push({...e, before, nav, unitsIssued, warning});
   }
-  return { rows, totalUnits: unitsOutstanding };
+  const result = { rows, totalUnits: unitsOutstanding };
+  _cacheSet("ledger", key, result);
+  logDebug("CACHE MISS: computeLedger computed", "warn");
+  return result;
 }
 
 function computeOwnership(rows, totalUnits){
@@ -677,6 +744,13 @@ function getLatestPV(){
 }
 
 function computePerformance(ownership, totalUnits){
+  const key = _fullKey();
+  const cached = _cacheHit("perf", key);
+  if(cached){
+    logDebug("CACHE HIT: computePerformance", "ok");
+    return cached;
+  }
+
   const latestPV = getLatestPV();
   if(!latestPV || latestPV <= 0 || totalUnits <= 0){
     return null;
@@ -694,7 +768,10 @@ function computePerformance(ownership, totalUnits){
     return {...m, currentValue, gain, gainPct, currentNav};
   });
 
-  return {totalContributed, totalCurrentValue, gainLoss, gainLossPct, currentNav, memberPerf};
+  const result = {totalContributed, totalCurrentValue, gainLoss, gainLossPct, currentNav, memberPerf};
+  _cacheSet("perf", key, result);
+  logDebug("CACHE SET: computePerformance", "ok");
+  return result;
 }
 
 function fmtPeso(n){
@@ -900,6 +977,13 @@ function escapeHtml(s){
 // ANALYTICS - FUND METRICS
 // ============================================
 function buildFundHistory(){
+  const key = _fullKey();
+  const cached = _cacheHit("fundHist", key);
+  if(cached){
+    logDebug("CACHE HIT: buildFundHistory", "ok");
+    return cached;
+  }
+
   const { rows } = computeLedger();
   if(rows.length === 0) return [];
 
@@ -935,6 +1019,8 @@ function buildFundHistory(){
     }
   }
 
+  _cacheSet("fundHist", key, history);
+  logDebug("CACHE SET: buildFundHistory", "ok");
   return history;
 }
 
@@ -1122,6 +1208,12 @@ function renderFundAnalytics(){
 // ANALYTICS - MEMBER METRICS
 // ============================================
 function buildMemberHistory(memberName){
+  const key = memberName + "|" + _fullKey();
+  if(_CACHE.memberHist[key]){
+    logDebug("CACHE HIT: buildMemberHistory(" + memberName + ")", "ok");
+    return _CACHE.memberHist[key];
+  }
+
   const { rows } = computeLedger();
   if(rows.length === 0) return [];
 
@@ -1183,6 +1275,8 @@ function buildMemberHistory(memberName){
     }
   }
 
+  _CACHE.memberHist[key] = memberRows;
+  logDebug("CACHE SET: buildMemberHistory(" + memberName + ")", "ok");
   return memberRows;
 }
 
@@ -1416,6 +1510,7 @@ async function connectToExistingBin(){
       pvSnapshots = [];
     }
     saveConfig(BIN_ID, API_KEY);
+    invalidateCache("all");
     status.className = "ok";
     status.textContent = "Connected successfully! Data loaded.";
     logDebug("Connected! Loaded " + entries.length + " entries", "ok");
@@ -1439,6 +1534,16 @@ document.getElementById("f-member").addEventListener("input", (e) => {
 document.getElementById("btn-toggle-debug").addEventListener("click", () => {
   const el = document.getElementById("debug-log");
   el.style.display = el.style.display === "none" ? "block" : "none";
+});
+
+document.getElementById("btn-cache-stats").addEventListener("click", () => {
+  const stats = {
+    ledger: _CACHE.ledger.key ? `HIT(h${_CACHE.ledger.hits}/m${_CACHE.ledger.misses})` : "EMPTY",
+    fundHist: _CACHE.fundHist.key ? `HIT(h${_CACHE.fundHist.hits}/m${_CACHE.fundHist.misses})` : "EMPTY",
+    memberHistKeys: Object.keys(_CACHE.memberHist).length,
+    perf: _CACHE.perf.key ? `HIT(h${_CACHE.perf.hits}/m${_CACHE.perf.misses})` : "EMPTY",
+  };
+  logDebug(`CACHE STATS — ledger:${stats.ledger} | fundHist:${stats.fundHist} | memberHist:${stats.memberHistKeys} entries | perf:${stats.perf}`, "ok");
 });
 
 // ============================================
@@ -1570,6 +1675,7 @@ updateConfigUI();
 if(hasConfig){
   loadEntries();
 } else {
+  invalidateCache("all");
   render();
 }
 </script>
