@@ -1,0 +1,29 @@
+name: NAVPU Bi-Weekly Audit
+
+on:
+  schedule:
+    - cron: '0 9 1,15 * *'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run NAVPU Audit Swarm
+        env:
+          JMS_BIN_ID: ${{ secrets.JMS_BIN_ID }}
+          JMS_API_KEY: ${{ secrets.JMS_API_KEY }}
+        run: node navpu-audit-swarm.js --auto
+
+      - name: Upload Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-reports/
+          retention-days: 90
