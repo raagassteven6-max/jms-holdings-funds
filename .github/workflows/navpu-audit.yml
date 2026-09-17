@@ -20,6 +20,11 @@ jobs:
           JMS_API_KEY: ${{ secrets.JMS_API_KEY }}
         run: node navpu-audit-swarm.js --auto
 
+      - name: Generate Fund Summary        # <-- NEW STEP HERE
+        if: always()                        # runs even if the audit fails, so you
+        run: node navpu-summarizer.js --report audit-reports/latest.json \
+             --out audit-reports/summary.md
+
       - name: Upload Report
         if: always()
         uses: actions/upload-artifact@v4
