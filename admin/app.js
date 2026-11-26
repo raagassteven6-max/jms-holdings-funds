@@ -13,6 +13,7 @@ const HARDCODED_API_KEY = "";
 const PALETTE = ["#0f766e", "#f59e0b", "#6366f1", "#dc2626", "#0891b2", "#7c3aed", "#65a30d", "#db2777"];
 let entries = [];
 let pvSnapshots = []; // Array of {date, value} for permanent PV history
+let transfers = [];   // unit transfers between members
 let chart = null;
 let useLocalFallback = false;
 
@@ -32,6 +33,352 @@ const PV_SNAPSHOTS_KEY = "jms_pv_snapshots_v1";
 let fundChart = null;
 let contribChart = null;
 let memberChart = null;
+
+// ============================================================
+// UNIT TRANSFERS: SHARED BLOCK
+// The admin page and the member page carry the same copy of this block.
+// If you change it in one file, change it in the other too.
+// ============================================================
+const UNIT_DUST = 0.000001;  // unit differences smaller than this are rounding noise
+const PAYMENT_DAYS = 7;
+
+// ---------- Reading the cloud data ----------
+
+// Turns what the bin returned into {entries, pvSnapshots, transfers}.
+// Anything else is refused, so an unrelated bin is never overwritten.
+function parseFundData(data){
+  if(Array.isArray(data)) return { entries: data, pvSnapshots: [], transfers: [] };
+  // Once transfers exist, contributions are saved under "contributions".
+  // Older copies of the app don't recognise that, so they cannot overwrite the transfers.
+  const list = data?.version === 2 ? data.contributions : data?.version === undefined ? data?.entries : null;
+  if(Array.isArray(list)){
+    return { entries: list, pvSnapshots: data.pvSnapshots || [], transfers: data.transfers || [] };
+  }
+  throw new Error("This bin does not contain fund data this page can read.");
+}
+
+// ---------- Dates ----------
+
+// Today's date in the Philippines (YYYY-MM-DD), wherever this device is
+function todayLocal(){
+  const parts = new Intl.DateTimeFormat("en-US", {timeZone:"Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit"}).formatToParts(new Date());
+  const part = type => parts.find(p => p.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+// "2026-11-26" becomes "November 26, 2026"
+function formatDate(isoDate){
+  if(!isoDate) return "";
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"});
+}
+
+// A saved moment, shown in Philippine time
+function formatDateTime(timestamp){
+  return new Date(timestamp).toLocaleString("en-US", {timeZone:"Asia/Manila", year:"numeric", month:"long", day:"numeric", hour:"numeric", minute:"2-digit"});
+}
+
+// Transfer prices need more decimals, so that units × price matches the amount paid
+function fmtPrice(n){
+  return "₱" + Number(n).toFixed(6);
+}
+
+// A difference smaller than half a centavo is zero, so it never shows as "-0.00"
+function noTinyAmount(n){
+  return Math.abs(n) < 0.005 ? 0 : n;
+}
+
+function fmtSignedPeso(n){
+  const amount = noTinyAmount(n);
+  return (amount >= 0 ? "+" : "") + fmtPeso(amount);
+}
+
+// ---------- Transfer facts ----------
+
+const sumOf = (list, key) => list.reduce((total, item) => total + item[key], 0);
+const transferUnits = t => sumOf(t.buyers, "units");
+const transferAmount = t => sumOf(t.buyers, "amount");
+const isOverdue = t => t.status === "pending" && todayLocal() > t.dueDate;
+const buyerNames = t => t.buyers.map(b => b.name).join(", ");
+
+function transferStatusLabel(t){
+  if(isOverdue(t)) return "Overdue";
+  return {pending:"Pending payment", completed:"Completed", cancelled:"Cancelled", voided:"Voided"}[t.status] ?? t.status;
+}
+
+// Units a member has promised in pending transfers. They still own them until completion.
+function reservedUnits(name){
+  return transfers
+    .filter(t => t.status === "pending" && t.seller === name)
+    .reduce((total, t) => total + transferUnits(t), 0);
+}
+
+// ---------- Who owns what ----------
+
+// Contributions first, then every completed transfer.
+// cost = what the units a member holds now cost them
+// realized = gain or loss already taken by selling units
+function memberHoldings(rows){
+  const holdings = Object.create(null);
+  const holdingFor = name => holdings[name] ??= {units:0, cost:0, contributed:0, bought:0, realized:0, traded:false};
+
+  for(const r of rows){
+    if(r.unitsIssued === null) continue;
+    const h = holdingFor(r.member);
+    h.units += r.unitsIssued;
+    h.cost += r.amount;
+    h.contributed += r.amount;
+  }
+
+  for(const t of transfers){
+    if(t.status !== "completed") continue;
+    const seller = holdingFor(t.seller);
+    seller.units -= transferUnits(t);
+    seller.cost -= t.costMoved;
+    seller.realized += transferAmount(t) - t.costMoved;
+    seller.traded = true;
+    for(const b of t.buyers){
+      const buyer = holdingFor(b.name);
+      buyer.units += b.units;
+      buyer.cost += b.amount;
+      buyer.bought += b.amount;
+      buyer.traded = true;
+    }
+  }
+
+  for(const h of Object.values(holdings)){
+    if(Math.abs(h.units) < UNIT_DUST) h.units = 0;
+    if(Math.abs(h.cost) < 0.005) h.cost = 0;
+  }
+  return holdings;
+}
+
+function computeOwnership(rows, totalUnits){
+  const list = Object.entries(memberHoldings(rows)).map(([name, h]) => ({
+    name,
+    units: h.units,
+    pct: totalUnits > 0 ? (h.units / totalUnits) * 100 : 0,
+    totalContributed: h.cost,   // cost of the units held now
+    contributed: h.contributed, // money this member put into the fund
+    bought: h.bought,
+    realized: h.realized,
+    traded: h.traded
+  }));
+  list.sort((a,b) => b.units - a.units);
+  return list;
+}
+
+// Everyone who has contributed, or taken part in a completed transfer
+function memberNames(){
+  const traded = transfers.filter(t => t.status === "completed").flatMap(t => [t.seller, ...t.buyers.map(b => b.name)]);
+  return [...new Set([...entries.map(e => e.member), ...traded].filter(Boolean))];
+}
+
+// One member's figures today (null until the fund has a value)
+function memberPosition(name){
+  const { rows, totalUnits } = computeLedger();
+  const perf = computePerformance(computeOwnership(rows, totalUnits), totalUnits);
+  return perf?.memberPerf.find(m => m.name === name) ?? null;
+}
+
+// The headline figures for one member, used by the analytics cards and the statement
+function memberFigures(name, history){
+  const holding = memberHoldings(computeLedger().rows)[name];
+  const cost = holding?.cost ?? 0;
+  const value = memberPosition(name)?.currentValue ?? history.at(-1).shareValue;
+  return {
+    cost, value,
+    units: holding?.units ?? 0,
+    contributed: holding?.contributed ?? 0,
+    bought: holding?.bought ?? 0,
+    realized: holding?.realized ?? 0,
+    traded: holding?.traded ?? false,
+    gain: noTinyAmount(value - cost),
+    returnPct: cost > 0 ? (noTinyAmount(value - cost) / cost) * 100 : 0
+  };
+}
+
+// Extra lines about a member's transfers (empty when there is nothing to say)
+function memberNotes(name){
+  const realized = memberHoldings(computeLedger().rows)[name]?.realized ?? 0;
+  const reserved = reservedUnits(name);
+  const notes = [];
+  if(Math.abs(realized) >= 0.005) notes.push(`Realized from units sold: ${fmtSignedPeso(realized)}`);
+  if(reserved > 0) notes.push(`${fmtUnits(reserved)} units set aside for a pending transfer`);
+  return notes;
+}
+
+// A member's story over time: contributions, transfers, and the value at each point
+function buildMemberHistory(memberName){
+  const key = memberName + "|" + _fullKey();
+  if(_CACHE.memberHist[key]) return _CACHE.memberHist[key];
+
+  const { rows, totalUnits } = computeLedger();
+  const moves = transfers
+    .filter(t => t.status === "completed" && (t.seller === memberName || t.buyers.some(b => b.name === memberName)))
+    .sort((a,b) => a.certificateNo.localeCompare(b.certificateNo));
+
+  const history = [];
+  let cost = 0;
+  let units = 0;
+
+  const addPoint = (date, nav, extra = {}) => history.push({
+    date, type:"value", amount:0, fundNav:nav, unitsIssued:0, ...extra,
+    memberTotalContrib: cost,
+    memberTotalUnits: units,
+    avgCost: units > 0 ? cost / units : 0,
+    shareValue: units * nav
+  });
+
+  const addTransfer = t => {
+    const purchase = t.buyers.find(b => b.name === memberName);
+    const unitChange = purchase ? purchase.units : -transferUnits(t);
+    const amount = purchase ? purchase.amount : transferAmount(t);
+    units += unitChange;
+    cost += purchase ? amount : -t.costMoved;
+    if(Math.abs(units) < UNIT_DUST) units = 0;
+    if(Math.abs(cost) < 0.005) cost = 0;
+    addPoint(t.completedDate, t.price, {type: purchase ? "bought" : "sold", amount, unitsIssued: unitChange, transfer: t});
+  };
+
+  let next = 0;
+  for(const r of rows){
+    if(r.nav === null) continue;
+    while(next < moves.length && moves[next].completedDate < r.date) addTransfer(moves[next++]);
+    if(r.member === memberName){
+      cost += r.amount;
+      units += r.unitsIssued;
+      addPoint(r.date, r.nav, {type:"contribution", amount:r.amount, unitsIssued:r.unitsIssued});
+    } else if(units > 0){
+      // The value of this member's units also moves when others contribute
+      addPoint(r.date, r.nav);
+    }
+  }
+  while(next < moves.length) addTransfer(moves[next++]);
+
+  // Points from portfolio value updates
+  if(units > 0 && totalUnits > 0){
+    const lastDate = history.at(-1).date;
+    for(const snap of pvSnapshots){
+      if(snap.date >= lastDate) addPoint(snap.date, snap.value / totalUnits);
+    }
+    // A transfer is priced on its agreement day, so finish the line at today's value
+    const last = history.at(-1);
+    if(last.type === "bought" || last.type === "sold") addPoint(last.date, getLatestPV() / totalUnits);
+  }
+
+  _CACHE.memberHist[key] = history;
+  return history;
+}
+
+// The Amount column in a member's history table
+function historyAmount(h){
+  const label = {bought:"Bought ", sold:"Sold "}[h.type] ?? "";
+  return label + fmtPeso(h.amount);
+}
+
+// ---------- Showing transfers ----------
+
+function transferCardHtml(t, actionsHtml = ""){
+  const fact = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  const facts = [
+    fact("Units", fmtUnits(transferUnits(t))),
+    fact(t.status === "completed" ? "Amount paid" : "Amount", fmtPeso(transferAmount(t))),
+    fact("Value per unit", fmtPrice(t.price)),
+    fact("Agreed", formatDate(t.agreedDate)),
+  ];
+  if(t.status === "pending") facts.push(fact("Pay by", formatDate(t.dueDate)));
+  if(t.completedDate) facts.push(fact("Completed", formatDate(t.completedDate)));
+  if(t.cancelledDate) facts.push(fact("Cancelled", formatDate(t.cancelledDate)));
+  if(t.voidedDate) facts.push(fact("Voided", formatDate(t.voidedDate)));
+
+  const buyers = t.buyers.map(b => `
+    <li><strong>${escapeHtml(b.name)}</strong><span class="mono">${fmtUnits(b.units)} units for ${fmtPeso(b.amount)}</span></li>`).join("");
+  const reason = t.voidReason || t.cancelReason;
+  const style = isOverdue(t) ? "overdue" : t.status;
+
+  return `
+    <article class="transfer-card is-${style}">
+      <div class="transfer-head">
+        <span class="transfer-chip">${transferStatusLabel(t)}</span>
+        <span class="transfer-no mono">${t.certificateNo ?? ""}</span>
+      </div>
+      <h3 class="transfer-title">${escapeHtml(t.seller)} → ${escapeHtml(buyerNames(t))}</h3>
+      <dl class="transfer-facts">${facts.join("")}</dl>
+      <ul class="transfer-buyers">${buyers}</ul>
+      ${reason ? `<p class="transfer-reason">Reason: ${escapeHtml(reason)}</p>` : ""}
+      ${actionsHtml ? `<div class="transfer-actions">${actionsHtml}</div>` : ""}
+    </article>`;
+}
+
+// Open transfers first (nearest deadline first), then history (newest first)
+function sortedTransfers(){
+  const open = transfers.filter(t => t.status === "pending").sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  const closed = transfers.filter(t => t.status !== "pending").sort((a,b) => b.agreedAt.localeCompare(a.agreedAt));
+  return [...open, ...closed];
+}
+
+function updateTransferCount(){
+  const open = transfers.filter(t => t.status === "pending").length;
+  document.getElementById("transfer-tab-btn").textContent = open ? `Transfers (${open})` : "Transfers";
+}
+
+// ---------- Certificate ----------
+
+function certificateHtml(t, isMemberCopy){
+  const buyerRows = t.buyers.map(b => `
+    <tr><td>${escapeHtml(b.name)}</td><td>${fmtUnits(b.units)}</td><td>${fmtPeso(b.amount)}</td><td>${escapeHtml(b.paymentRef) || "—"}</td></tr>`).join("");
+  const parties = [
+    {name: t.seller, role: "Seller", before: t.sellerUnitsBefore, after: t.sellerUnitsAfter},
+    ...t.buyers.map(b => ({name: b.name, role: "Buyer", before: b.unitsBefore, after: b.unitsAfter}))
+  ];
+  const holdingRows = parties.map(p => `
+    <tr><td>${escapeHtml(p.name)} (${p.role})</td><td>${fmtUnits(p.before)}</td><td>${fmtUnits(p.after)}</td></tr>`).join("");
+  const signatures = [...parties, {name:"", role:"Treasurer"}].map(p => `
+    <div class="cert-sign"><span>${escapeHtml(p.name) || "&nbsp;"}</span>${p.role}</div>`).join("");
+
+  return `
+    <div class="cert-page">
+      ${t.status === "voided" ? `<div class="cert-void"><strong>VOID</strong>Voided on ${formatDate(t.voidedDate)}. Reason: ${escapeHtml(t.voidReason)}</div>` : ""}
+      ${isMemberCopy ? `<div class="cert-copy">Member copy. The signed original is kept by the treasurer.</div>` : ""}
+      <div class="cert-header">
+        <div class="cert-fund">JMS HOLDINGS FUND</div>
+        <div class="cert-title">UNIT TRANSFER CERTIFICATE</div>
+        <div class="cert-no">No. ${t.certificateNo}</div>
+      </div>
+      <dl class="cert-facts">
+        <div><dt>Date agreed (price set)</dt><dd>${formatDate(t.agreedDate)}</dd></div>
+        <div><dt>Date completed (units moved)</dt><dd>${formatDateTime(t.completedAt)}, Philippine time</dd></div>
+        <div><dt>From</dt><dd>${escapeHtml(t.seller)}</dd></div>
+        <div><dt>To</dt><dd>${escapeHtml(buyerNames(t))}</dd></div>
+        <div><dt>Units transferred</dt><dd>${fmtUnits(transferUnits(t))}</dd></div>
+        <div><dt>Value per unit</dt><dd>${fmtPrice(t.price)}</dd></div>
+        <div><dt>Total amount paid</dt><dd>${fmtPeso(transferAmount(t))}</dd></div>
+      </dl>
+      <table class="cert-table">
+        <thead><tr><th>Buyer</th><th>Units</th><th>Amount paid</th><th>Payment reference</th></tr></thead>
+        <tbody>${buyerRows}</tbody>
+      </table>
+      <table class="cert-table">
+        <thead><tr><th>Holdings</th><th>Units before</th><th>Units after</th></tr></thead>
+        <tbody>${holdingRows}</tbody>
+      </table>
+      <div class="cert-signs">${signatures}</div>
+      <div class="cert-footer">Internal family record of JMS Holdings.</div>
+    </div>`;
+}
+
+function printCertificate(id, isMemberCopy){
+  const t = transfers.find(x => x.id === id);
+  if(!t?.certificateNo) return;
+  const view = document.getElementById("print-cert-view");
+  view.innerHTML = certificateHtml(t, isMemberCopy);
+  // This tells the print layout to print the certificate and nothing else
+  document.body.classList.add("print-cert");
+  view.style.display = "block";
+  window.print();
+  setTimeout(() => { view.style.display = "none"; }, 500);
+}
 
 const debugLines = [];
 function logDebug(msg, type="info"){
@@ -98,13 +445,16 @@ function loadLocalEntries(){
         if(Array.isArray(data.entries)){
           entries = data.entries;
           pvSnapshots = data.pvSnapshots || [];
+          transfers = data.transfers || [];
         } else if(Array.isArray(data)){
           entries = data;
           pvSnapshots = [];
+          transfers = [];
         }
       } else if(Array.isArray(data)){
         entries = data;
         pvSnapshots = [];
+        transfers = [];
       }
       logDebug(`Loaded ${entries.length} entries from localStorage`, "ok");
       return true;
@@ -114,6 +464,7 @@ function loadLocalEntries(){
   }
   entries = [];
   pvSnapshots = [];
+  transfers = [];
   logDebug("No local entries found", "warn");
   return false;
 }
@@ -122,7 +473,8 @@ function saveLocalEntries(){
   try{
     const payload = {
       entries: entries,
-      pvSnapshots: pvSnapshots
+      pvSnapshots: pvSnapshots,
+      transfers: transfers
     };
     localStorage.setItem(LOCAL_KEY, JSON.stringify(payload));
     logDebug(`Saved ${entries.length} entries to localStorage`, "ok");
@@ -143,10 +495,7 @@ function getLatestPV(){
 
 // The date of the latest value written out in full, e.g. "November 26, 2026"
 function formatValueDate(){
-  const isoDate = pvSnapshots[pvSnapshots.length - 1]?.date;
-  if(!isoDate) return "";
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"});
+  return formatDate(pvSnapshots.at(-1)?.date);
 }
 
 // Fills every "Values as of" line, and leaves them empty when there is nothing to value
@@ -164,12 +513,6 @@ function getPVForDate(dateStr){
     if(snap.date <= dateStr) best = snap.value;
   }
   return best;
-}
-
-// Today's date on this device (not UTC, which would show yesterday early in the morning)
-function todayLocal(){
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 // Records the fund value for a date. It is stored when saveEntries() succeeds.
@@ -266,29 +609,26 @@ async function jsonbinCreate(payload){
 // DATA LAYER
 // ============================================
 
-// Turns what the bin returned into {entries, pvSnapshots}.
-// Anything else is refused, so an unrelated bin is never overwritten.
-function parseFundData(data){
-  if(Array.isArray(data)) return { entries: data, pvSnapshots: [] };
-  if(data && Array.isArray(data.entries)){
-    return { entries: data.entries, pvSnapshots: data.pvSnapshots || [] };
-  }
-  throw new Error("This bin does not contain fund data.");
-}
-
 // The same data always gives the same text, whatever order its fields arrive in
 function fingerprint(data){
-  return JSON.stringify([data.entries, data.pvSnapshots], (key, value) =>
+  return JSON.stringify([data.entries, data.pvSnapshots, data.transfers], (key, value) =>
     value && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
       : value
   );
 }
 
+// The shape saved in the cloud. See parseFundData for why it changes once transfers exist.
+function toCloud({entries, pvSnapshots, transfers}){
+  if(transfers.length === 0) return { entries, pvSnapshots };
+  return { version: 2, contributions: entries, pvSnapshots, transfers };
+}
+
 // Replaces what is on screen with a fresh copy from the cloud
 function useCloudData(data){
   entries = data.entries;
   pvSnapshots = data.pvSnapshots;
+  transfers = data.transfers;
   cloudFingerprint = fingerprint(data);
   cloudReady = true;
   useLocalFallback = false;
@@ -346,7 +686,7 @@ async function saveEntries(){
     return { ok: false, message: "Nothing was saved.\nThe cloud data has not loaded yet.\nCheck your connection, then reload the page." };
   }
 
-  const payload = { entries, pvSnapshots };
+  const payload = { entries, pvSnapshots, transfers };
   const mine = fingerprint(payload);
 
   const maxAttempts = 3;
@@ -360,7 +700,7 @@ async function saveEntries(){
           logDebug("Save refused: cloud data changed elsewhere", "err");
           return { ok: false, message: "Nothing was saved.\nThe cloud data was changed somewhere else after this page loaded.\nReload the page, check the latest entries, then try again." };
         }
-        await jsonbinUpdate(payload);
+        await jsonbinUpdate(toCloud(payload));
       }
       cloudFingerprint = mine;
       useLocalFallback = false;
@@ -394,7 +734,7 @@ async function commitChange(change, messageEl){
 
   isSaving = true;
   messageEl.textContent = "Saving...";
-  const backup = structuredClone({ entries, pvSnapshots });
+  const backup = structuredClone({ entries, pvSnapshots, transfers });
 
   change();
   invalidateCache("all");
@@ -403,6 +743,7 @@ async function commitChange(change, messageEl){
   if(!result.ok){
     entries = backup.entries;
     pvSnapshots = backup.pvSnapshots;
+    transfers = backup.transfers;
     invalidateCache("all");
   }
   isSaving = false;
@@ -434,7 +775,7 @@ function _pvKey(){
   return `${pvSnapshots.length}|${last.date || ""}|${last.value || 0}`;
 }
 
-function _fullKey(){ return _entriesKey() + "||" + _pvKey(); }
+function _fullKey(){ return _entriesKey() + "||" + _pvKey() + "||" + JSON.stringify(transfers); }
 
 function _cacheHit(level, key){
   if(_CACHE[level].key === key){
@@ -476,9 +817,16 @@ function computeLedger(){
     return cached;
   }
 
+  const result = computeLedgerFor(entries);
+  _cacheSet("ledger", key, result);
+  logDebug("CACHE MISS: computeLedger computed", "warn");
+  return result;
+}
+
+function computeLedgerFor(list){
   let unitsOutstanding = 0;
   const rows = [];
-  for(const e of entries){
+  for(const e of list){
     const before = unitsOutstanding;
     let nav, unitsIssued, warning = null;
     if(before === 0){
@@ -498,26 +846,7 @@ function computeLedger(){
     }
     rows.push({...e, before, nav, unitsIssued, warning});
   }
-  const result = { rows, totalUnits: unitsOutstanding };
-  _cacheSet("ledger", key, result);
-  logDebug("CACHE MISS: computeLedger computed", "warn");
-  return result;
-}
-
-function computeOwnership(rows, totalUnits){
-  const byMember = {};
-  const memberContributions = {};
-  for(const r of rows){
-    if(r.unitsIssued === null) continue;
-    byMember[r.member] = (byMember[r.member] || 0) + r.unitsIssued;
-    memberContributions[r.member] = (memberContributions[r.member] || 0) + r.amount;
-  }
-  const list = Object.entries(byMember).map(([name, units]) => ({
-    name, units, pct: totalUnits > 0 ? (units / totalUnits) * 100 : 0,
-    totalContributed: memberContributions[name] || 0
-  }));
-  list.sort((a,b) => b.units - a.units);
-  return list;
+  return { rows, totalUnits: unitsOutstanding };
 }
 
 function computePerformance(ownership, totalUnits){
@@ -533,14 +862,15 @@ function computePerformance(ownership, totalUnits){
     return null;
   }
   const currentNav = latestPV / totalUnits;
-  const totalContributed = ownership.reduce((sum, m) => sum + m.totalContributed, 0);
+  // Only money put into the fund counts. Transfers move money between members.
+  const totalContributed = sumOf(ownership, "contributed");
   const totalCurrentValue = latestPV;
   const gainLoss = totalCurrentValue - totalContributed;
   const gainLossPct = totalContributed > 0 ? (gainLoss / totalContributed) * 100 : 0;
 
   const memberPerf = ownership.map(m => {
     const currentValue = m.units * currentNav;
-    const gain = currentValue - m.totalContributed;
+    const gain = noTinyAmount(currentValue - m.totalContributed);
     const gainPct = m.totalContributed > 0 ? (gain / m.totalContributed) * 100 : 0;
     return {...m, currentValue, gain, gainPct, currentNav};
   });
@@ -566,14 +896,10 @@ function render(){
 
   const dl = document.getElementById("member-list");
   dl.innerHTML = "";
-  const seen = new Set();
-  entries.forEach(e => {
-    if(e.member && !seen.has(e.member)){
-      seen.add(e.member);
-      const opt = document.createElement("option");
-      opt.value = e.member;
-      dl.appendChild(opt);
-    }
+  memberNames().forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    dl.appendChild(opt);
   });
 
   const tbody = document.getElementById("log-body");
@@ -649,7 +975,9 @@ function render(){
       let gainHtml = "";
       if(perf){
         const mp = perf.memberPerf.find(x => x.name === m.name);
-        if(mp){
+        if(mp && mp.traded && mp.units === 0){
+          gainHtml = `<span class="ledger-gain">All units sold</span>`;
+        } else if(mp){
           const isGain = mp.gain >= 0;
           gainHtml = `<span class="ledger-gain ${isGain ? 'up' : 'down'}">${isGain ? '+' : ''}${fmtPeso(mp.gain).replace('₱','')} (${isGain ? '+' : ''}${mp.gainPct.toFixed(2)}%)</span>`;
         }
@@ -660,6 +988,7 @@ function render(){
         <span class="ledger-pct">${m.pct.toFixed(2)}%</span>
         <span class="ledger-units mono">${fmtUnits(m.units)} u</span>
         ${gainHtml}
+        ${memberNotes(m.name).map(note => `<span class="ledger-note">${note}</span>`).join("")}
       `;
       ledgerList.appendChild(row);
     });
@@ -707,9 +1036,18 @@ function render(){
       }
     });
   }
+
+  renderTransfers();
 }
 
 function confirmRemove(entry){
+  const problem = removalProblem(entry);
+  if(problem){
+    const messageEl = document.getElementById("pv-warn");
+    messageEl.textContent = problem;
+    messageEl.scrollIntoView({ block: "center" });
+    return;
+  }
   showConfirmModal(
     "Remove this entry?",
     `${entry.date} · ${entry.member} · ${fmtPeso(entry.amount)}\n\nUnits for later entries will be recalculated.\nThis cannot be undone.`,
@@ -971,87 +1309,10 @@ function renderFundAnalytics(){
 // ============================================
 // ANALYTICS - MEMBER METRICS
 // ============================================
-function buildMemberHistory(memberName){
-  const key = memberName + "|" + _fullKey();
-  if(_CACHE.memberHist[key]){
-    logDebug("CACHE HIT: buildMemberHistory(" + memberName + ")", "ok");
-    return _CACHE.memberHist[key];
-  }
-
-  const { rows } = computeLedger();
-  if(rows.length === 0) return [];
-
-  const memberRows = [];
-  let memberTotalContrib = 0;
-  let memberTotalUnits = 0;
-
-  for(const r of rows){
-    if(r.nav === null) continue;
-
-    if(r.member === memberName){
-      memberTotalContrib += r.amount;
-      memberTotalUnits += r.unitsIssued || 0;
-      const avgCost = memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0;
-
-      memberRows.push({
-        date: r.date,
-        amount: r.amount,
-        fundNav: r.nav,
-        unitsIssued: r.unitsIssued,
-        memberTotalContrib: memberTotalContrib,
-        memberTotalUnits: memberTotalUnits,
-        avgCost: avgCost,
-        shareValue: memberTotalUnits * r.nav
-      });
-    } else {
-      // Still track fund NAV evolution for non-member rows so we can show share value at each point
-      if(memberTotalUnits > 0){
-        memberRows.push({
-          date: r.date,
-          amount: 0,
-          fundNav: r.nav,
-          unitsIssued: 0,
-          memberTotalContrib: memberTotalContrib,
-          memberTotalUnits: memberTotalUnits,
-          avgCost: memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0,
-          shareValue: memberTotalUnits * r.nav
-        });
-      }
-    }
-  }
-
-  // Add PV snapshot points
-  if(pvSnapshots.length > 0 && memberTotalUnits > 0){
-    const { totalUnits } = computeLedger();
-    const lastEntryDate = memberRows.length > 0 ? memberRows[memberRows.length - 1].date : null;
-    for(const snap of pvSnapshots){
-      if(lastEntryDate && snap.date < lastEntryDate) continue;
-      const currentNav = totalUnits > 0 ? snap.value / totalUnits : 1;
-      memberRows.push({
-        date: snap.date,
-        amount: 0,
-        fundNav: currentNav,
-        unitsIssued: 0,
-        memberTotalContrib: memberTotalContrib,
-        memberTotalUnits: memberTotalUnits,
-        avgCost: memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0,
-        shareValue: memberTotalUnits * currentNav
-      });
-    }
-  }
-
-  _CACHE.memberHist[key] = memberRows;
-  logDebug("CACHE SET: buildMemberHistory(" + memberName + ")", "ok");
-  return memberRows;
-}
-
 function populateMemberSelector(){
   const select = document.getElementById("member-select");
   const currentVal = select.value;
-
-  // Get unique members
-  const members = [...new Set(entries.map(e => e.member).filter(m => m))];
-  members.sort();
+  const members = memberNames().sort();
 
   select.innerHTML = '<option value="">Choose a member...</option>';
   members.forEach(m => {
@@ -1086,16 +1347,17 @@ function renderMemberAnalytics(){
     return;
   }
 
-  const latest = history[history.length - 1];
-  const totalReturn = latest.memberTotalContrib > 0 ? ((latest.shareValue - latest.memberTotalContrib) / latest.memberTotalContrib) * 100 : 0;
+  const figures = memberFigures(memberName, history);
+  const totalReturn = figures.returnPct;
 
-  // Snapshot cards
   const snapContrib = document.getElementById("snap-contributed");
   const snapCurrent = document.getElementById("snap-current");
   const snapReturn = document.getElementById("snap-return");
 
-  snapContrib.textContent = fmtPeso(latest.memberTotalContrib);
-  snapCurrent.textContent = fmtPeso(latest.shareValue);
+  snapContrib.textContent = fmtPeso(figures.cost);
+  snapContrib.nextElementSibling.textContent = figures.traded ? "Cost of Current Units" : "Total Contributed";
+  document.getElementById("snap-note").textContent = memberNotes(memberName).join("\n");
+  snapCurrent.textContent = fmtPeso(figures.value);
   snapReturn.textContent = (totalReturn >= 0 ? "+" : "") + totalReturn.toFixed(2) + "%";
   snapReturn.className = "value mono " + (totalReturn >= 0 ? "gain" : "loss");
 
@@ -1200,11 +1462,11 @@ function renderMemberAnalytics(){
   const tbody = document.getElementById("member-history-body");
   tbody.innerHTML = "";
 
-  history.filter(h => h.amount > 0).forEach(h => {
+  history.filter(h => h.type !== "value").forEach(h => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono">${h.date}</td>
-      <td class="mono">${fmtPeso(h.amount)}</td>
+      <td class="mono">${historyAmount(h)}</td>
       <td class="mono">${h.fundNav.toFixed(4)}</td>
       <td class="mono">${fmtUnits(h.unitsIssued)}</td>
       <td class="mono">${h.avgCost.toFixed(4)}</td>
@@ -1263,7 +1525,7 @@ async function createNewBin(){
     BIN_ID = newBinId;
     saveConfig(BIN_ID, API_KEY);
     await jsonbinUpdate({entries: [], pvSnapshots: []});
-    useCloudData({entries: [], pvSnapshots: []});
+    useCloudData({entries: [], pvSnapshots: [], transfers: []});
 
     status.className = "config-status ok";
     status.textContent = "New bin created successfully!";
@@ -1342,7 +1604,7 @@ function showSyncStatus(msg, type){
 }
 
 document.getElementById("btn-export").addEventListener("click", () => {
-  const payload = {entries, pvSnapshots};
+  const payload = {entries, pvSnapshots, transfers};
   const data = JSON.stringify(payload, null, 2);
   const textarea = document.createElement("textarea");
   textarea.value = data;
@@ -1542,6 +1804,442 @@ document.getElementById("update-pv-btn").addEventListener("click", async () => {
 });
 
 // ============================================
+// TRANSFERS (treasurer only)
+// ============================================
+const FULL_AMOUNT_GAP = 0.01; // pesos: how close counts as "the full amount"
+
+const findTransfer = id => transfers.find(t => t.id === id);
+
+function addDays(isoDate, days){
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+// What a seller can still offer: units held, minus units already promised
+function availableUnits(name){
+  const held = memberHoldings(computeLedger().rows)[name]?.units ?? 0;
+  const free = held - reservedUnits(name);
+  return free > UNIT_DUST ? free : 0;
+}
+
+// Today's value per unit, or the reason a transfer cannot be priced yet
+function todaysPrice(){
+  const { totalUnits } = computeLedger();
+  const latestPV = getLatestPV();
+  if(!(latestPV > 0) || !(totalUnits > 0)){
+    return { message: "There is nothing to transfer yet.\nLog contributions and update the portfolio value first." };
+  }
+  const valueDate = pvSnapshots.at(-1).date;
+  if(valueDate !== todayLocal()){
+    return { message: `The portfolio value was last updated on ${formatDate(valueDate)}.\nA transfer uses today's value, so first go to the Overview tab and press "Update Portfolio Value" (even if the number is the same).` };
+  }
+  return { price: latestPV / totalUnits, fundValue: latestPV, totalUnits };
+}
+
+// Checks the form and works out each buyer's units. Returns {ok, message} or the full plan.
+function planTransfer(seller, buyerInputs){
+  const fail = message => ({ ok: false, message });
+
+  const today = todaysPrice();
+  if(today.message) return fail(today.message);
+  if(!seller) return fail("Choose who is transferring units.");
+
+  const available = availableUnits(seller);
+  if(available === 0) return fail(`${seller} has no units available.\nUnits in a pending transfer cannot be offered twice.`);
+
+  const filled = buyerInputs.filter(b => b.name || b.amount !== "");
+  if(filled.length === 0) return fail("Add at least one buyer and the amount they will pay.");
+
+  // Reuse the spelling of existing members, so "maria" does not become a second Maria
+  const pendingBuyers = transfers.filter(t => t.status === "pending").flatMap(t => t.buyers.map(b => b.name));
+  const known = new Map([...memberNames(), ...pendingBuyers].map(n => [n.toLowerCase(), n]));
+
+  const buyers = [];
+  for(const input of filled){
+    if(!input.name) return fail("Every buyer needs a name.");
+    const name = known.get(input.name.toLowerCase()) ?? input.name;
+    const amount = Math.round(Number(input.amount) * 100) / 100;
+    if(!(amount > 0)) return fail(`Enter how much ${name} will pay.`);
+    if(name.toLowerCase() === seller.toLowerCase()) return fail("The seller cannot also be a buyer.");
+    if(buyers.some(b => b.name.toLowerCase() === name.toLowerCase())){
+      return fail(`${name} is listed twice.\nPut their full amount on one line.`);
+    }
+    buyers.push({ name, amount, isNew: !known.has(name.toLowerCase()) });
+  }
+
+  const total = sumOf(buyers, "amount");
+  const availableValue = available * today.price;
+  const tooMuch = () => fail(`That is more than ${seller} can transfer.\nAvailable: ${fmtPeso(availableValue)} (${fmtUnits(available)} units).\nEntered: ${fmtPeso(total)}.`);
+  if(total > availableValue + FULL_AMOUNT_GAP) return tooMuch();
+
+  // Paying the full available value moves every unit, with nothing tiny left behind
+  const sellsEverything = total >= availableValue - FULL_AMOUNT_GAP;
+  let left = available;
+  buyers.forEach((b, i) => {
+    b.units = sellsEverything && i === buyers.length - 1 ? left : b.amount / today.price;
+    left -= b.units;
+  });
+  // The one-centavo allowance must never leave the last buyer paying for no units
+  if(buyers.some(b => b.units <= UNIT_DUST)) return tooMuch();
+
+  return { ok: true, ...today, seller, buyers, available, availableValue, total, sellsEverything };
+}
+
+// ---------- New transfer form ----------
+
+function buyerRows(){
+  return [...document.querySelectorAll("#t-buyers .buyer-row")];
+}
+
+function readBuyerInputs(){
+  return buyerRows().map(row => ({
+    name: row.querySelector(".t-buyer-name").value.trim(),
+    amount: row.querySelector(".t-buyer-amount").value
+  }));
+}
+
+function addBuyerRow(){
+  const row = document.createElement("div");
+  row.className = "buyer-row";
+  row.innerHTML = `
+    <div><label>Buyer</label><input type="text" class="t-buyer-name" list="member-list" placeholder="Name"></div>
+    <div><label>Pays (₱)</label><input type="number" class="t-buyer-amount" min="0" step="0.01" placeholder="0.00"></div>
+    <button type="button" class="buyer-remove" aria-label="Remove this buyer">×</button>
+    <div class="buyer-units mono"></div>`;
+  row.querySelector(".buyer-remove").addEventListener("click", () => {
+    row.remove();
+    if(buyerRows().length === 0) addBuyerRow();
+    refreshTransferPreview();
+  });
+  document.getElementById("t-buyers").appendChild(row);
+}
+
+function refreshTransferForm(){
+  const select = document.getElementById("t-seller");
+  const chosen = select.value;
+  const today = todaysPrice();
+
+  select.innerHTML = '<option value="">Choose a member...</option>';
+  for(const name of memberNames().sort()){
+    const units = availableUnits(name);
+    if(units === 0) continue;
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = today.price ? `${name} (${fmtPeso(units * today.price)} available)` : name;
+    select.appendChild(option);
+  }
+  select.value = [...select.options].some(o => o.value === chosen) ? chosen : "";
+
+  const priceLine = document.getElementById("t-price");
+  priceLine.classList.toggle("blocked", !today.price);
+  priceLine.textContent = today.price
+    ? `Value per unit today: ${fmtPrice(today.price)}\nFrom the portfolio value dated ${formatDate(todayLocal())}.`
+    : today.message;
+  refreshTransferPreview();
+}
+
+// Shows units and totals while you type
+function refreshTransferPreview(){
+  const { price } = todaysPrice();
+  const seller = document.getElementById("t-seller").value;
+  const inputs = readBuyerInputs();
+  buyerRows().forEach((row, i) => {
+    const amount = Number(inputs[i].amount);
+    row.querySelector(".buyer-units").textContent = price && amount > 0 ? `≈ ${fmtUnits(amount / price)} units` : "";
+  });
+
+  const summary = document.getElementById("t-summary");
+  if(!price || !seller){
+    summary.textContent = "";
+    return;
+  }
+  const available = availableUnits(seller) * price;
+  const total = inputs.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+  const left = available - total;
+  const ending = left < -FULL_AMOUNT_GAP ? `Over by ${fmtPeso(-left)}.`
+    : left <= FULL_AMOUNT_GAP ? `This transfers everything ${seller} has available.`
+    : `${fmtPeso(left)} stays with ${seller}.`;
+  summary.textContent = `Total: ${fmtPeso(total)} of ${fmtPeso(available)} available.\n${ending}`;
+}
+
+// Puts whatever is still available on the last buyer line
+function fillRemainingAmount(){
+  const { price } = todaysPrice();
+  const seller = document.getElementById("t-seller").value;
+  if(!price || !seller) return;
+  const rows = buyerRows();
+  const others = readBuyerInputs().slice(0, -1).reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+  const rest = Math.max(availableUnits(seller) * price - others, 0);
+  rows.at(-1).querySelector(".t-buyer-amount").value = rest.toFixed(2);
+  refreshTransferPreview();
+}
+
+function resetTransferForm(){
+  document.getElementById("t-seller").value = "";
+  document.getElementById("t-buyers").innerHTML = "";
+  addBuyerRow();
+  refreshTransferPreview();
+}
+
+function recordTransfer(){
+  const warnEl = document.getElementById("t-warn");
+  warnEl.textContent = "";
+  const seller = document.getElementById("t-seller").value;
+  const inputs = readBuyerInputs();
+  const plan = planTransfer(seller, inputs);
+  if(!plan.ok){
+    warnEl.textContent = plan.message;
+    return;
+  }
+
+  const lines = plan.buyers.map(b => `${b.name}${b.isNew ? " (new member)" : ""}: ${fmtPeso(b.amount)} for ${fmtUnits(b.units)} units`);
+  showConfirmModal(
+    "Record this agreement?",
+    `From ${seller} to:\n${lines.join("\n")}\n\nValue per unit: ${fmtPrice(plan.price)}\nPayment due: ${formatDate(addDays(todayLocal(), PAYMENT_DAYS))}\n\nUnits move only after you confirm payment.`,
+    async () => {
+      // Checked again, in case anything changed while this box was open
+      const fresh = planTransfer(seller, inputs);
+      if(!fresh.ok){
+        warnEl.textContent = fresh.message;
+        return;
+      }
+      const record = {
+        id: `T${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+        status: "pending",
+        seller,
+        price: fresh.price,
+        fundValue: fresh.fundValue,
+        totalUnits: fresh.totalUnits,
+        buyers: fresh.buyers.map(({name, units, amount}) => ({name, units, amount})),
+        agreedDate: todayLocal(),
+        agreedAt: new Date().toISOString(),
+        dueDate: addDays(todayLocal(), PAYMENT_DAYS)
+      };
+      if(await commitChange(() => transfers.push(record), warnEl)){
+        resetTransferForm();
+        warnEl.textContent = "Agreement recorded.\nThe units are set aside until you confirm payment.";
+      }
+    },
+    { hint: "This check prevents recording a transfer by accident." }
+  );
+}
+
+// ---------- Actions on a transfer ----------
+
+// Saves a change to one transfer. makeChange returns an error message, or nothing on success.
+async function changeTransfer(id, expectedStatus, makeChange, successMessage){
+  const messageEl = document.getElementById("t-list-warn");
+  messageEl.textContent = "";
+  const current = findTransfer(id);
+  if(!current || current.status !== expectedStatus){
+    messageEl.textContent = "This transfer has changed.\nReload the page and check it again.";
+    return;
+  }
+  const problem = makeChange(structuredClone(current), true);
+  if(problem){
+    messageEl.textContent = problem;
+    messageEl.scrollIntoView({ block: "center" });
+    return;
+  }
+  if(await commitChange(() => makeChange(findTransfer(id), false), messageEl)){
+    messageEl.textContent = successMessage;
+  }
+  messageEl.scrollIntoView({ block: "center" });
+}
+
+function nextCertificateNo(year){
+  const prefix = `JMS-T-${year}-`;
+  const used = transfers
+    .filter(t => t.certificateNo?.startsWith(prefix))
+    .map(t => Number(t.certificateNo.slice(prefix.length)));
+  return prefix + String(Math.max(0, ...used) + 1).padStart(4, "0");
+}
+
+function askCompleteTransfer(t){
+  showConfirmModal(
+    "Confirm payment and complete",
+    `Complete ONLY if every buyer has paid.\n\n${t.seller} → ${buyerNames(t)}\nTotal: ${fmtPeso(transferAmount(t))} for ${fmtUnits(transferUnits(t))} units.\n\nThe units move now and a certificate is created.`,
+    values => changeTransfer(t.id, "pending", (target, checkOnly) => {
+      if(isOverdue(target)) return "This transfer is overdue.\nExtend it by 7 days or cancel it first.";
+      const holdings = memberHoldings(computeLedger().rows);
+      const seller = holdings[target.seller];
+      const units = transferUnits(target);
+      if(!seller || seller.units < units - UNIT_DUST){
+        return `${target.seller} no longer holds enough units for this transfer.\nCancel it and record a new one.`;
+      }
+      if(checkOnly) return;
+
+      // The figures are saved on the record, so reprints always match
+      const sellerAfter = seller.units - units < UNIT_DUST ? 0 : seller.units - units;
+      target.sellerUnitsBefore = seller.units;
+      target.sellerUnitsAfter = sellerAfter;
+      // The seller's cost leaves with the units, at their average cost per unit
+      target.costMoved = sellerAfter === 0 ? seller.cost : seller.cost * units / seller.units;
+      target.buyers.forEach((b, i) => {
+        b.unitsBefore = holdings[b.name]?.units ?? 0;
+        b.unitsAfter = b.unitsBefore + b.units;
+        b.paymentRef = values[`ref${i}`];
+      });
+      target.completedDate = todayLocal();
+      target.completedAt = new Date().toISOString();
+      target.certificateNo = nextCertificateNo(target.completedDate.slice(0, 4));
+      target.status = "completed";
+    }, "Transfer completed.\nYou can now print the certificate."),
+    {
+      hint: "This check prevents moving units by accident.",
+      fields: t.buyers.map((b, i) => ({ id: `ref${i}`, label: `Payment reference from ${b.name} (optional)` }))
+    }
+  );
+}
+
+function askExtendTransfer(t){
+  const newDate = addDays(todayLocal(), PAYMENT_DAYS);
+  showConfirmModal(
+    "Extend the payment deadline?",
+    `New deadline: ${formatDate(newDate)}.\nThe value per unit stays the same.`,
+    () => changeTransfer(t.id, "pending", (target, checkOnly) => {
+      if(!checkOnly) target.dueDate = newDate;
+    }, "Deadline extended."),
+    { hint: "This check prevents changes by accident." }
+  );
+}
+
+function askCancelTransfer(t){
+  showConfirmModal(
+    "Cancel this transfer?",
+    `${t.seller} keeps all the units.\nIf any buyer already paid, return their money.`,
+    values => changeTransfer(t.id, "pending", (target, checkOnly) => {
+      if(checkOnly) return;
+      target.status = "cancelled";
+      target.cancelledDate = todayLocal();
+      target.cancelReason = values.reason;
+    }, "Transfer cancelled.\nThe units are available again."),
+    { hint: "This check prevents cancelling by accident.", fields: [{ id: "reason", label: "Reason (optional)" }] }
+  );
+}
+
+// Why a completed transfer cannot be voided right now, if anything
+function voidProblem(t){
+  const holdings = memberHoldings(computeLedger().rows);
+  const laterSale = transfers.find(other =>
+    other.status === "completed" && other.certificateNo > t.certificateNo && t.buyers.some(b => b.name === other.seller));
+  if(laterSale){
+    return `Void ${laterSale.certificateNo} first.\n${laterSale.seller} sold units after receiving them in this transfer.`;
+  }
+  const short = t.buyers.find(b => (holdings[b.name]?.units ?? 0) - reservedUnits(b.name) < b.units - UNIT_DUST);
+  if(short){
+    return `${short.name} no longer has all of these units free.\nCancel their pending transfer first.`;
+  }
+}
+
+function askVoidTransfer(t){
+  const problem = voidProblem(t);
+  if(problem){
+    const messageEl = document.getElementById("t-list-warn");
+    messageEl.textContent = problem;
+    messageEl.scrollIntoView({ block: "center" });
+    return;
+  }
+  showConfirmModal(
+    `Void ${t.certificateNo}?`,
+    `Use this only if the completed record is wrong.\nThe units go back to ${t.seller}.\nAny money already paid must be returned outside the app.`,
+    values => changeTransfer(t.id, "completed", (target, checkOnly) => {
+      const stillProblem = voidProblem(target);
+      if(stillProblem) return stillProblem;
+      if(checkOnly) return;
+      target.status = "voided";
+      target.voidedDate = todayLocal();
+      target.voidReason = values.reason;
+    }, "Transfer voided.\nThe units are back with the seller."),
+    { fields: [{ id: "reason", label: "Why is it being voided?", required: true }], hint: "This cannot be undone." }
+  );
+}
+
+// A ready-made message for telling the other members
+function transferNotice(t){
+  const lines = [
+    "JMS Holdings: unit transfer",
+    `Status: ${transferStatusLabel(t)}${t.certificateNo ? ` (${t.certificateNo})` : ""}`,
+    `From: ${t.seller}`,
+    ...t.buyers.map(b => `To: ${b.name}, ${fmtUnits(b.units)} units for ${fmtPeso(b.amount)}`),
+    `Value per unit: ${fmtPrice(t.price)}`,
+    `Agreed: ${formatDate(t.agreedDate)}`
+  ];
+  if(t.status === "pending") lines.push(`Payment due: ${formatDate(t.dueDate)}`, "Units move once payment is confirmed.");
+  if(t.status === "completed") lines.push(`Completed: ${formatDate(t.completedDate)}`);
+  if(t.status === "cancelled") lines.push(`Cancelled: ${formatDate(t.cancelledDate)}. No units moved.`);
+  if(t.status === "voided") lines.push(`Voided: ${formatDate(t.voidedDate)}. The units went back to ${t.seller}.`);
+  return lines.join("\n");
+}
+
+async function copyNotice(t){
+  const messageEl = document.getElementById("t-list-warn");
+  const text = transferNotice(t);
+  try{
+    await navigator.clipboard.writeText(text);
+    messageEl.textContent = "Notice copied.\nPaste it into your family chat.";
+  }catch(e){
+    // Some browsers block copying, so show the text to copy by hand
+    messageEl.textContent = `Could not copy automatically.\nSelect and copy this:\n\n${text}`;
+  }
+  messageEl.scrollIntoView({ block: "center" });
+}
+
+const TRANSFER_ACTIONS = {
+  complete: { label: "Confirm Payment & Complete", run: askCompleteTransfer },
+  extend:   { label: "Extend 7 Days", run: askExtendTransfer },
+  cancel:   { label: "Cancel Transfer", run: askCancelTransfer, danger: true },
+  print:    { label: "Print Certificate", run: t => printCertificate(t.id, false) },
+  void:     { label: "Void", run: askVoidTransfer, danger: true },
+  notice:   { label: "Copy Notice", run: copyNotice }
+};
+
+function actionsFor(t){
+  if(t.status === "pending") return isOverdue(t) ? ["extend", "cancel", "notice"] : ["complete", "cancel", "notice"];
+  if(t.status === "completed") return ["print", "notice", "void"];
+  if(t.status === "voided") return ["print", "notice"];
+  return ["notice"];
+}
+
+function renderTransfers(){
+  updateTransferCount();
+  refreshTransferForm();
+  const list = document.getElementById("t-list");
+  list.innerHTML = sortedTransfers().map(t => transferCardHtml(t, actionsFor(t).map(key => `
+      <button type="button" class="btn-tool${TRANSFER_ACTIONS[key].danger ? " danger" : ""}" data-action="${key}" data-id="${escapeHtml(t.id)}">${TRANSFER_ACTIONS[key].label}</button>`).join(""))
+  ).join("") || '<div class="empty-note">No transfers yet.</div>';
+}
+
+// Why a contribution cannot be removed, if transfers depend on it
+function removalProblem(entry){
+  const sale = transfers.find(t => t.status === "completed" && t.seller === entry.member && t.completedDate >= entry.date);
+  if(sale){
+    return `This contribution cannot be removed.\nIt is part of the figures on transfer ${sale.certificateNo}.\nVoid that transfer first.`;
+  }
+  const holdings = memberHoldings(computeLedgerFor(entries.filter(e => e !== entry)).rows);
+  const names = new Set([...Object.keys(holdings), ...transfers.map(t => t.seller)]);
+  for(const name of names){
+    if((holdings[name]?.units ?? 0) - reservedUnits(name) < -UNIT_DUST){
+      return `This contribution cannot be removed.\nIt would leave ${name} with fewer units than they have transferred or set aside.\nCancel or void that transfer first.`;
+    }
+  }
+}
+
+document.getElementById("t-seller").addEventListener("change", refreshTransferPreview);
+document.getElementById("t-buyers").addEventListener("input", refreshTransferPreview);
+document.getElementById("t-add-buyer").addEventListener("click", () => { addBuyerRow(); refreshTransferPreview(); });
+document.getElementById("t-fill").addEventListener("click", fillRemainingAmount);
+document.getElementById("t-record").addEventListener("click", recordTransfer);
+document.getElementById("t-list").addEventListener("click", e => {
+  const button = e.target.closest("[data-action]");
+  const t = button && findTransfer(button.dataset.id);
+  if(t) TRANSFER_ACTIONS[button.dataset.action].run(t);
+});
+// Re-checks the date and price whenever the tab is opened
+document.getElementById("transfer-tab-btn").addEventListener("click", renderTransfers);
+addBuyerRow();
+
+// ============================================
 // INIT
 // ============================================
 const hasConfig = loadConfig();
@@ -1567,16 +2265,43 @@ if(hasConfig){
 // ============================================
 let confirmCallback = null;
 
-function showConfirmModal(title, message, onConfirm){
+const DEFAULT_HINT = "This safety check prevents accidental deletion.";
+
+// fields: extra boxes to fill in, as [{id, label, required}]. onConfirm receives their values.
+function showConfirmModal(title, message, onConfirm, {fields = [], hint = DEFAULT_HINT} = {}){
   document.getElementById("modal-title").textContent = title;
   document.getElementById("modal-msg").textContent = message;
+  document.getElementById("modal-hint").textContent = hint;
+  const box = document.getElementById("modal-fields");
+  box.innerHTML = "";
+  for(const field of fields){
+    const label = document.createElement("label");
+    label.textContent = field.label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.dataset.field = field.id;
+    input.required = Boolean(field.required);
+    input.maxLength = 120;
+    input.autocomplete = "off";
+    label.appendChild(input);
+    box.appendChild(label);
+  }
   document.getElementById("confirm-code").value = "";
-  document.getElementById("confirm-code").classList.remove("valid");
-  document.getElementById("modal-confirm").classList.remove("active");
-  document.getElementById("modal-confirm").disabled = true;
   confirmCallback = onConfirm;
+  updateConfirmButton();
   document.getElementById("confirm-modal").classList.add("visible");
   document.getElementById("confirm-code").focus();
+}
+
+// Confirm stays locked until 0000 is typed and every required box is filled
+function updateConfirmButton(){
+  const code = document.getElementById("confirm-code");
+  const codeOk = code.value.trim() === "0000";
+  const filled = [...document.querySelectorAll("#modal-fields input[required]")].every(input => input.value.trim());
+  code.classList.toggle("valid", codeOk);
+  const button = document.getElementById("modal-confirm");
+  button.classList.toggle("active", codeOk && filled);
+  button.disabled = !(codeOk && filled);
 }
 
 function hideConfirmModal(){
@@ -1584,23 +2309,13 @@ function hideConfirmModal(){
   confirmCallback = null;
 }
 
-document.getElementById("confirm-code").addEventListener("input", (e) => {
-  const val = e.target.value.trim();
-  const btn = document.getElementById("modal-confirm");
-  if(val === "0000"){
-    e.target.classList.add("valid");
-    btn.classList.add("active");
-    btn.disabled = false;
-  } else {
-    e.target.classList.remove("valid");
-    btn.classList.remove("active");
-    btn.disabled = true;
-  }
-});
+document.getElementById("confirm-modal").addEventListener("input", updateConfirmButton);
 
 document.getElementById("modal-cancel").addEventListener("click", hideConfirmModal);
 document.getElementById("modal-confirm").addEventListener("click", () => {
-  if(confirmCallback) confirmCallback();
+  const values = Object.fromEntries(
+    [...document.querySelectorAll("#modal-fields input")].map(input => [input.dataset.field, input.value.trim()]));
+  if(confirmCallback) confirmCallback(values);
   hideConfirmModal();
 });
 
@@ -1614,6 +2329,7 @@ document.getElementById("btn-clear-local").addEventListener("click", () => {
         localStorage.removeItem(LOCAL_KEY);
         clearPVSnapshots();
         entries = [];
+        transfers = [];
         resetCloudState();
         invalidateCache("all");
         logDebug("Local entries cleared", "warn");
@@ -1637,6 +2353,7 @@ document.getElementById("btn-disconnect").addEventListener("click", () => {
         localStorage.removeItem(CONFIG_KEY);
         clearPVSnapshots();
         entries = [];
+        transfers = [];
         resetCloudState();
         invalidateCache("all");
         BIN_ID = "";
@@ -1662,7 +2379,7 @@ function generateFundLog(){
   const perf = computePerformance(ownership, totalUnits);
 
   const today = new Date().toLocaleDateString("en-PH", {year:"numeric", month:"long", day:"numeric"});
-  const members = [...new Set(entries.map(e => e.member).filter(m => m))];
+  const members = memberNames();
 
   document.getElementById("fl-date").textContent = today;
   document.getElementById("fl-asof").textContent = formatValueDate() || "—";
@@ -1689,6 +2406,16 @@ function generateFundLog(){
     document.getElementById("fl-return").textContent = "—";
   }
 
+  // Once there are transfers, cost and realized gain are shown as well
+  const hasTrades = ownership.some(m => m.traded);
+  document.getElementById("fl-cost-head").textContent = hasTrades ? "Cost of Units" : "Contributed";
+  document.getElementById("fl-realized-head").hidden = !hasTrades;
+  document.getElementById("fl-transfer-section").hidden = transfers.length === 0;
+  document.getElementById("fl-transfer-body").innerHTML = sortedTransfers().map(t => `
+    <tr><td class="mono">${t.agreedDate}</td><td>${transferStatusLabel(t)}</td><td class="mono">${t.certificateNo ?? "—"}</td>
+    <td>${escapeHtml(t.seller)}</td><td>${escapeHtml(buyerNames(t))}</td>
+    <td class="mono">${fmtUnits(transferUnits(t))}</td><td class="mono">${fmtPeso(transferAmount(t))}</td></tr>`).join("");
+
   // Ownership table
   const ownBody = document.getElementById("fl-ownership-body");
   ownBody.innerHTML = "";
@@ -1706,6 +2433,7 @@ function generateFundLog(){
         <td class="mono">${mp ? fmtPeso(mp.currentValue) : "—"}</td>
         <td class="mono" style="color:${mp && mp.gain >= 0 ? '#16a34a' : '#dc2626'}">${mp ? (mp.gain >= 0 ? '+' : '') + fmtPeso(mp.gain) : '—'}</td>
         <td class="mono" style="color:${mp && mp.gainPct >= 0 ? '#16a34a' : '#dc2626'}">${mp ? (mp.gainPct >= 0 ? '+' : '') + mp.gainPct.toFixed(2) + '%' : '—'}</td>
+        ${hasTrades ? `<td class="mono">${fmtSignedPeso(m.realized)}</td>` : ""}
       `;
       ownBody.appendChild(tr);
     });
@@ -1732,6 +2460,7 @@ function generateFundLog(){
     });
   }
 
+  document.body.classList.remove("print-cert");
   const view = document.getElementById("print-fund-view");
   view.style.display = "block";
   window.print();

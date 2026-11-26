@@ -553,6 +553,84 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none !important;transition:none !important;}
 }
+
+/* ---------- 17. Transfers tab ---------- */
+.transfer-layout{display:grid;grid-template-columns:minmax(320px,420px) minmax(0,1fr);gap:20px;align-items:start;}
+.t-price{margin-bottom:14px;padding:10px 12px;background:var(--well);border-radius:var(--radius-sm);font-size:14px;font-weight:700;white-space:pre-line;}
+.t-price.blocked{background:#fdefc6;color:#6f4a0c;}
+.buyer-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:4px 10px;margin-top:12px;}
+.buyer-remove{width:36px;height:42px;background:transparent;border:1px solid var(--line-strong);border-radius:var(--radius-sm);font-size:20px;color:var(--danger);}
+.buyer-units{grid-column:1/-1;font-size:12.5px;color:var(--ink-soft);}
+.buyer-units:empty{display:none;}
+.t-buyer-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.t-summary{margin:12px 0;font-size:14px;font-weight:600;white-space:pre-line;}
+#t-list-warn:empty{min-height:0;margin:0;}
+#t-list-warn:not(:empty){margin:0 0 12px;}
+.modal-fields label{margin-bottom:12px;text-align:left;}
+.modal-fields input{display:block;margin-top:4px;}
+@media(max-width:1000px){
+  .transfer-layout{grid-template-columns:minmax(0,1fr);}
+}
+@media(max-width:640px){
+  .tab-btn{padding-left:6px;padding-right:6px;}
+}
+
+/* ---------- Unit transfers (same on both pages) ---------- */
+.transfer-card{margin-bottom:12px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-left:4px solid #8a948f;border-radius:8px;}
+.transfer-card.is-pending{border-left-color:#d99a1e;}
+.transfer-card.is-overdue{border-left-color:#b91c1c;}
+.transfer-card.is-completed{border-left-color:#157a38;}
+.transfer-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;}
+.transfer-chip{padding:2px 8px;border-radius:4px;background:#eceeed;color:#3f4a46;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+.is-pending .transfer-chip{background:#fdefc6;color:#6f4a0c;}
+.is-overdue .transfer-chip{background:#fdeaea;color:#7f1d1d;}
+.is-completed .transfer-chip{background:#e3f6e8;color:#14532d;}
+.transfer-no{font-size:12.5px;color:var(--ink-soft);}
+.transfer-card .transfer-title{margin:10px 0;font-size:17px;overflow-wrap:anywhere;}
+.transfer-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px 14px;margin:0;}
+.transfer-facts dt{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);}
+.transfer-facts dd{margin:2px 0 0;font-size:14px;font-weight:700;overflow-wrap:anywhere;}
+.transfer-buyers{margin:12px 0 0;padding:8px 0 0;border-top:1px solid var(--line);list-style:none;font-size:13.5px;}
+.transfer-buyers li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;padding:2px 0;}
+.transfer-reason{margin:8px 0 0;font-size:13px;color:var(--ink-soft);}
+.transfer-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.ledger-row{flex-wrap:wrap;}
+.ledger-note{flex-basis:100%;grid-column:1/-1;text-align:right;font-size:12px;color:var(--ink-soft);}
+.member-note{margin:-6px 0 16px;font-size:13.5px;font-weight:600;color:var(--ink-soft);white-space:pre-line;}
+.member-note:empty{display:none;}
+
+/* ---------- Transfer certificate ---------- */
+.cert-view{display:none;position:fixed;inset:0;z-index:9999;overflow:auto;background:#fff;}
+.cert-page{max-width:720px;margin:0 auto;padding:36px 32px;color:#111;font-size:13px;line-height:1.45;}
+.cert-header{margin-bottom:18px;padding-bottom:14px;border-bottom:5px double #0b2e29;text-align:center;}
+.cert-fund{font-family:Lora,Georgia,serif;font-size:22px;font-weight:700;letter-spacing:.1em;}
+.cert-title{margin-top:4px;font-size:13px;font-weight:700;letter-spacing:.16em;}
+.cert-no{margin-top:8px;font-size:13px;}
+.cert-copy{margin-bottom:14px;padding:6px 10px;border:1.5px dashed #555;text-align:center;font-weight:700;}
+.cert-void{margin-bottom:14px;padding:8px 12px;border:4px solid #b91c1c;color:#b91c1c;text-align:center;}
+.cert-void strong{display:block;font-size:34px;letter-spacing:.3em;}
+.cert-facts{margin:0 0 18px;}
+.cert-facts div{display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px dotted #bbb;}
+.cert-facts dt{color:#555;}
+.cert-facts dd{margin:0;text-align:right;font-weight:700;overflow-wrap:anywhere;}
+.cert-table{width:100%;margin-bottom:18px;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;}
+.cert-table th{padding:6px 4px;border-bottom:1.5px solid #222;text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#555;}
+.cert-table td{padding:6px 4px;border-bottom:1px solid #ddd;overflow-wrap:anywhere;}
+.cert-signs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:40px 28px;margin-top:48px;}
+.cert-sign{padding-top:5px;border-top:1px solid #222;text-align:center;font-size:11px;color:#555;}
+.cert-sign span{display:block;font-size:13px;font-weight:700;color:#111;}
+.cert-footer{margin-top:32px;padding-top:12px;border-top:1px solid #ccc;text-align:center;font-size:11.5px;color:#666;}
+@media print{
+  body.print-cert{min-height:0;padding:0;background:#fff;}
+  body.print-cert .shell,body.print-cert .modal-overlay,body.print-cert #print-fund-view{display:none !important;}
+  body.print-cert .cert-view{display:block !important;position:static;overflow:visible;}
+  body.print-cert .cert-view,body.print-cert .cert-view *{visibility:visible;}
+  body:not(.print-cert) .cert-view{display:none !important;}
+  .cert-page{padding:8px;}
+  .cert-table tr,.cert-signs,.cert-footer{break-inside:avoid;}
+  /* Keep the transfers title on the same page as its table */
+  #stmt-transfer-section{break-inside:avoid;}
+}
 </style>
 </head>
 <body>
@@ -581,6 +659,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
       <div class="tab-nav">
         <button class="tab-btn active" data-tab="overview">Overview</button>
         <button class="tab-btn" data-tab="analytics">Analytics</button>
+        <button class="tab-btn" data-tab="transfers" id="transfer-tab-btn">Transfers</button>
       </div>
     </nav>
   </header>
@@ -719,6 +798,8 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
                 <li>Value per unit (shown as NAV) = fund value ÷ total units.</li>
                 <li>Your value = your units × value per unit.</li>
                 <li>Adding money buys units at that day's value, so it doesn't change the value of anyone else's units.</li>
+                <li>A transfer moves units between members. The fund's total stays the same.</li>
+                <li>After a transfer, your gain compares your value with what your current units cost you. Gains from units already sold show as "realized".</li>
               </ul>
             </div>
           </section>
@@ -848,6 +929,8 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
               </div>
             </div>
 
+            <div class="member-note" id="snap-note"></div>
+
             <div class="chart-card">
               <div class="chart-title">
                 <span class="dot" style="background:var(--an-teal);"></span>
@@ -862,7 +945,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
               </div></div>
             </div>
 
-            <h3>Contribution History</h3>
+            <h3>Contribution &amp; Transfer History</h3>
             <div class="table-scroll-wrap">
               <table class="member-history-table" id="member-history-table">
                 <thead>
@@ -878,6 +961,32 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
             <div>Select a member above to view their performance history and charts.</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ====== TRANSFERS TAB ====== -->
+    <div class="tab-panel" id="tab-transfers">
+      <div class="transfer-layout">
+        <section class="panel primary">
+          <h2>New Unit Transfer</h2>
+          <div class="t-price" id="t-price"></div>
+          <label for="t-seller">Seller (who is transferring units)</label>
+          <select id="t-seller"></select>
+          <div id="t-buyers"></div>
+          <div class="t-buyer-tools">
+            <button type="button" class="btn-tool" id="t-add-buyer">Add Another Buyer</button>
+            <button type="button" class="btn-tool" id="t-fill">Use All That Remains</button>
+          </div>
+          <div class="t-summary" id="t-summary" aria-live="polite"></div>
+          <button type="button" class="btn-add" id="t-record">Record Agreement</button>
+          <div class="warn" id="t-warn" aria-live="polite"></div>
+          <div class="notice"><strong>Before you record:</strong> the price is locked at today's value and buyers have 7 days to pay. The payment belongs to the seller, even if you pass it along, so don't log it as a contribution or add it to the portfolio value.</div>
+        </section>
+        <section class="panel">
+          <h2>Transfers</h2>
+          <div class="warn" id="t-list-warn" aria-live="polite"></div>
+          <div id="t-list"></div>
+        </section>
       </div>
     </div>
   </div>
@@ -905,13 +1014,14 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-title" id="modal-title">Confirm Action</div>
     <div class="modal-msg" id="modal-msg">This action cannot be undone.</div>
+    <div class="modal-fields" id="modal-fields"></div>
     <div class="modal-label">Type 0000 to confirm:</div>
     <input type="text" id="confirm-code" class="modal-input" placeholder="0000" maxlength="4" autocomplete="off" aria-label="Type 0000 to confirm">
     <div class="modal-actions">
       <button class="modal-cancel" id="modal-cancel">Cancel</button>
       <button class="modal-confirm" id="modal-confirm" disabled>Confirm</button>
     </div>
-    <div class="modal-hint">This safety check prevents accidental deletion.</div>
+    <div class="modal-hint" id="modal-hint">This safety check prevents accidental deletion.</div>
   </div>
 </div>
 
@@ -940,7 +1050,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
     <div class="fund-log-section">
       <div class="fund-log-section-title">OWNERSHIP BREAKDOWN</div>
       <table class="fund-log-table">
-        <thead><tr><th>Member</th><th>Units</th><th>Ownership %</th><th>Contributed</th><th>Current Value</th><th>Gain/Loss</th><th>Return %</th></tr></thead>
+        <thead><tr><th>Member</th><th>Units</th><th>Ownership %</th><th id="fl-cost-head">Contributed</th><th>Current Value</th><th>Gain/Loss</th><th>Return %</th><th id="fl-realized-head" hidden>Realized</th></tr></thead>
         <tbody id="fl-ownership-body"></tbody>
       </table>
     </div>
@@ -949,6 +1059,13 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
       <table class="fund-log-table">
         <thead><tr><th>#</th><th>Date</th><th>Member</th><th>Amount</th><th>PV Before</th><th>NAV</th><th>Units Issued</th></tr></thead>
         <tbody id="fl-log-body"></tbody>
+      </table>
+    </div>
+    <div class="fund-log-section" id="fl-transfer-section" hidden>
+      <div class="fund-log-section-title">UNIT TRANSFERS</div>
+      <table class="fund-log-table">
+        <thead><tr><th>Agreed</th><th>Status</th><th>Certificate</th><th>From</th><th>To</th><th>Units</th><th>Amount</th></tr></thead>
+        <tbody id="fl-transfer-body"></tbody>
       </table>
     </div>
     <div class="fund-log-footer">
@@ -960,6 +1077,8 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
 </div>
 
 
-<script src="app.js?v=3"></script>
+<div id="print-cert-view" class="cert-view"></div>
+
+<script src="app.js?v=4"></script>
 </body>
 </html>
