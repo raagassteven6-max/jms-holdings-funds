@@ -16,6 +16,11 @@ let pvSnapshots = []; // Array of {date, value} for permanent PV history
 let chart = null;
 let useLocalFallback = false;
 
+// Cloud safety: the page may only write after it has read the cloud copy
+let cloudReady = false;       // true once the cloud data has loaded in this session
+let cloudFingerprint = null;  // the cloud data as this page last saw it
+let isSaving = false;         // blocks double taps while a save is running
+
 let BIN_ID = "";
 let API_KEY = "";
 
@@ -126,21 +131,9 @@ function saveLocalEntries(){
   }
 }
 
-function loadPVSnapshots(){
-  try{
-    const saved = localStorage.getItem(PV_SNAPSHOTS_KEY);
-    if(saved){
-      pvSnapshots = JSON.parse(saved);
-      if(!Array.isArray(pvSnapshots)) pvSnapshots = [];
-    }
-    // Show latest value in input
-    const latest = getLatestPV();
-    if(latest !== null){
-      document.getElementById("f-current-pv").value = latest;
-    }
-  }catch(e){
-    pvSnapshots = [];
-  }
+// Puts the latest saved value into the "Current Total Portfolio Value" box
+function syncPVInput(){
+  document.getElementById("f-current-pv").value = getLatestPV() ?? "";
 }
 
 function getLatestPV(){
@@ -158,21 +151,21 @@ function getPVForDate(dateStr){
   return best;
 }
 
-function savePVSnapshot(value){
-  // Use LOCAL date, not UTC — fixes early-morning snapshots appearing on wrong day
+// Today's date on this device (not UTC, which would show yesterday early in the morning)
+function todayLocal(){
   const d = new Date();
-  const today = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-  // Check if we already have a snapshot for today - update it
-  const existing = pvSnapshots.find(s => s.date === today);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// Records the fund value for a date. It is stored when saveEntries() succeeds.
+function savePVSnapshot(value, date = todayLocal()){
+  const existing = pvSnapshots.find(s => s.date === date);
   if(existing){
     existing.value = value;
   } else {
-    pvSnapshots.push({date: today, value: value});
+    pvSnapshots.push({date, value});
     pvSnapshots.sort((a,b) => a.date.localeCompare(b.date));
   }
-  try{
-    localStorage.setItem(PV_SNAPSHOTS_KEY, JSON.stringify(pvSnapshots));
-  }catch(e){}
 }
 
 function clearPVSnapshots(){
@@ -257,76 +250,109 @@ async function jsonbinCreate(payload){
 // ============================================
 // DATA LAYER
 // ============================================
+
+// Turns what the bin returned into {entries, pvSnapshots}.
+// Anything else is refused, so an unrelated bin is never overwritten.
+function parseFundData(data){
+  if(Array.isArray(data)) return { entries: data, pvSnapshots: [] };
+  if(data && Array.isArray(data.entries)){
+    return { entries: data.entries, pvSnapshots: data.pvSnapshots || [] };
+  }
+  throw new Error("This bin does not contain fund data.");
+}
+
+// The same data always gives the same text, whatever order its fields arrive in
+function fingerprint(data){
+  return JSON.stringify([data.entries, data.pvSnapshots], (key, value) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
+      : value
+  );
+}
+
+// Replaces what is on screen with a fresh copy from the cloud
+function useCloudData(data){
+  entries = data.entries;
+  pvSnapshots = data.pvSnapshots;
+  cloudFingerprint = fingerprint(data);
+  cloudReady = true;
+  useLocalFallback = false;
+  saveLocalEntries();
+  invalidateCache("all");
+  syncPVInput();
+}
+
+function resetCloudState(){
+  cloudReady = false;
+  cloudFingerprint = null;
+}
+
 async function loadEntries(){
   const banner = document.getElementById("status-banner");
   banner.textContent = "";
 
   loadLocalEntries();
+  resetCloudState();
 
   if(!BIN_ID || !API_KEY){
     logDebug("No cloud config, using local only", "warn");
+    invalidateCache("all");
+    syncPVInput();
     render();
     return;
   }
 
   try{
-    const data = await jsonbinRead();
-    if(data && typeof data === "object"){
-      if(Array.isArray(data.entries)){
-        entries = data.entries;
-        pvSnapshots = data.pvSnapshots || [];
-      } else if(Array.isArray(data)){
-        entries = data;
-        pvSnapshots = [];
-      } else {
-        entries = [];
-        pvSnapshots = [];
-      }
-    } else {
-      entries = [];
-      pvSnapshots = [];
-    }
-    saveLocalEntries();
-    invalidateCache("all");
-    const latestPV = getLatestPV();
-    if(latestPV !== null){
-      document.getElementById("f-current-pv").value = latestPV;
-    }
-    banner.textContent = "";
-    useLocalFallback = false;
+    useCloudData(parseFundData(await jsonbinRead()));
     logDebug("Cloud load successful, synced to local", "ok");
   }catch(e){
     logDebug("Cloud load FAILED: " + e.message, "err");
-    banner.textContent = "⚠ Cloud load failed — showing locally saved data. Check your connection.";
+    banner.textContent = "⚠ Cloud load failed. Showing the copy saved in this browser.\nChanges are paused so the cloud data stays safe.\nCheck your connection, then reload the page.";
     useLocalFallback = true;
+    invalidateCache("all");
+    syncPVInput();
   }
   render();
 }
 
+// Saves the current data. Returns {ok, message}.
+// Before writing, it checks that nobody changed the cloud since this page loaded it.
 async function saveEntries(){
   const banner = document.getElementById("status-banner");
 
-  saveLocalEntries();
-
   if(!BIN_ID || !API_KEY){
+    saveLocalEntries();
     banner.textContent = "⚠ Not connected to cloud. Data saved locally in this browser only.";
     logDebug("No cloud config, saved local only", "warn");
-    return false;
+    return { ok: true };
   }
 
-  const payload = {
-    entries: entries,
-    pvSnapshots: pvSnapshots
-  };
+  if(!cloudReady){
+    return { ok: false, message: "Nothing was saved.\nThe cloud data has not loaded yet.\nCheck your connection, then reload the page." };
+  }
+
+  const payload = { entries, pvSnapshots };
+  const mine = fingerprint(payload);
 
   const maxAttempts = 3;
   for(let attempt = 1; attempt <= maxAttempts; attempt++){
     try{
-      await jsonbinUpdate(payload);
-      banner.textContent = "";
+      const inCloud = fingerprint(parseFundData(await jsonbinRead()));
+      // If the cloud already matches, an earlier attempt got through
+      if(inCloud !== mine){
+        if(inCloud !== cloudFingerprint){
+          cloudReady = false;
+          logDebug("Save refused: cloud data changed elsewhere", "err");
+          return { ok: false, message: "Nothing was saved.\nThe cloud data was changed somewhere else after this page loaded.\nReload the page, check the latest entries, then try again." };
+        }
+        await jsonbinUpdate(payload);
+      }
+      cloudFingerprint = mine;
       useLocalFallback = false;
+      saveLocalEntries();
+      banner.textContent = "";
       logDebug(`Cloud save successful (attempt ${attempt})`, "ok");
-      return true;
+      return { ok: true };
     }catch(e){
       logDebug(`Cloud save attempt ${attempt} FAILED: ${e.message}`, "err");
       if(attempt < maxAttempts){
@@ -336,10 +362,39 @@ async function saveEntries(){
       }
     }
   }
-  banner.textContent = "⚠ Cloud save failed — data saved locally. Check your Bin ID / API Key.";
-  useLocalFallback = true;
   logDebug("All cloud save attempts exhausted", "err");
-  return false;
+  return { ok: false, message: "The change could not be saved to the cloud, so it was not applied.\nCheck your connection and try again.\nIf it keeps failing, reload the page." };
+}
+
+// Applies a change, and keeps it only if it could be saved
+async function commitChange(change, messageEl){
+  if(isSaving){
+    messageEl.textContent = "Still saving the last change.\nWait a moment, then try again.";
+    return false;
+  }
+  if(BIN_ID && API_KEY && !cloudReady){
+    messageEl.textContent = "Nothing was saved.\nThe cloud data has not loaded, so saving now could overwrite it.\nCheck your connection, then reload the page.";
+    return false;
+  }
+
+  isSaving = true;
+  messageEl.textContent = "Saving...";
+  const backup = structuredClone({ entries, pvSnapshots });
+
+  change();
+  invalidateCache("all");
+  const result = await saveEntries();
+
+  if(!result.ok){
+    entries = backup.entries;
+    pvSnapshots = backup.pvSnapshots;
+    invalidateCache("all");
+  }
+  isSaving = false;
+  messageEl.textContent = result.ok ? "" : result.message;
+  syncPVInput();
+  render();
+  return result.ok;
 }
 
 // ============================================
@@ -413,7 +468,8 @@ function computeLedger(){
     let nav, unitsIssued, warning = null;
     if(before === 0){
       nav = 1;
-    } else if(e.pv === null || e.pv === undefined || isNaN(e.pv)){
+    } else if(!(e.pv > 0)){
+      // A missing or zero value would create endless units, so the row is flagged instead
       warning = "Missing portfolio value";
       nav = null;
     } else {
@@ -529,13 +585,7 @@ function render(){
     });
   }
   tbody.querySelectorAll(".del-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const i = parseInt(btn.getAttribute("data-idx"));
-      entries.splice(i, 1);
-      invalidateCache("all");
-      saveEntries();
-      render();
-    });
+    btn.addEventListener("click", () => confirmRemove(entries[Number(btn.dataset.idx)]));
   });
 
   document.getElementById("total-units-label").textContent = totalUnits > 0 ? Number(totalUnits.toFixed(2)).toLocaleString("en-PH") : "0";
@@ -643,6 +693,23 @@ function render(){
   }
 }
 
+function confirmRemove(entry){
+  showConfirmModal(
+    "Remove this entry?",
+    `${entry.date} · ${entry.member} · ${fmtPeso(entry.amount)}\n\nUnits for later entries will be recalculated.\nThis cannot be undone.`,
+    async () => {
+      const messageEl = document.getElementById("pv-warn");
+      const removed = await commitChange(() => {
+        const i = entries.indexOf(entry);
+        if(i !== -1) entries.splice(i, 1);
+      }, messageEl);
+      if(removed){
+        messageEl.textContent = "Entry removed.\nThe current portfolio value was not changed.\nCheck it, then press Update Portfolio Value.";
+      }
+    }
+  );
+}
+
 function escapeHtml(s){
   const d = document.createElement("div");
   d.textContent = s || "";
@@ -672,7 +739,8 @@ function buildFundHistory(){
     history.push({
       date: r.date,
       nav: r.nav,
-      fundValue: r.pv || cumulativeContrib,
+      // Value right after this contribution: what it was before, plus the new money
+      fundValue: (r.pv || 0) + r.amount,
       cumulativeContrib: cumulativeContrib,
       totalUnits: r.before + (r.unitsIssued || 0)
     });
@@ -1159,10 +1227,10 @@ function updateConfigUI(){
 async function createNewBin(){
   const apiKey = document.getElementById("cfg-api-key").value.trim();
   const status = document.getElementById("cfg-status");
-  status.className = "";
+  status.className = "config-status";
 
   if(!apiKey){
-    status.className = "err";
+    status.className = "config-status err";
     status.textContent = "Please paste your X-Master-Key first.";
     return;
   }
@@ -1178,13 +1246,10 @@ async function createNewBin(){
     }
     BIN_ID = newBinId;
     saveConfig(BIN_ID, API_KEY);
-    entries = [];
-    pvSnapshots = [];
-    saveLocalEntries();
-
     await jsonbinUpdate({entries: [], pvSnapshots: []});
+    useCloudData({entries: [], pvSnapshots: []});
 
-    status.className = "ok";
+    status.className = "config-status ok";
     status.textContent = "New bin created successfully!";
     updateConfigUI();
     render();
@@ -1193,7 +1258,7 @@ async function createNewBin(){
     logDebug("Create bin FAILED: " + e.message, "err");
     BIN_ID = "";
     API_KEY = "";
-    status.className = "err";
+    status.className = "config-status err";
     status.textContent = "Failed: " + e.message;
 
     document.getElementById("fallback-notice").style.display = "block";
@@ -1208,15 +1273,15 @@ async function connectToExistingBin(){
   const apiKey = document.getElementById("cfg-api-key").value.trim();
   const binId = document.getElementById("cfg-bin-id").value.trim();
   const status = document.getElementById("cfg-status");
-  status.className = "";
+  status.className = "config-status";
 
   if(!apiKey){
-    status.className = "err";
+    status.className = "config-status err";
     status.textContent = "Please paste your X-Master-Key.";
     return;
   }
   if(!binId){
-    status.className = "err";
+    status.className = "config-status err";
     status.textContent = "Please enter a Bin ID, or use 'Create New Bin' instead.";
     return;
   }
@@ -1227,29 +1292,10 @@ async function connectToExistingBin(){
   logDebug("Connecting to existing bin: " + binId);
 
   try{
-    const data = await jsonbinRead();
-    if(data && typeof data === "object"){
-      if(Array.isArray(data.entries)){
-        entries = data.entries;
-        pvSnapshots = data.pvSnapshots || [];
-      } else if(Array.isArray(data)){
-        entries = data;
-        pvSnapshots = [];
-      } else {
-        entries = [];
-        pvSnapshots = [];
-      }
-    } else {
-      entries = [];
-      pvSnapshots = [];
-    }
+    const data = parseFundData(await jsonbinRead());
     saveConfig(BIN_ID, API_KEY);
-    saveLocalEntries();
-    const latestPV = getLatestPV();
-    if(latestPV !== null){
-      document.getElementById("f-current-pv").value = latestPV;
-    }
-    status.className = "ok";
+    useCloudData(data);
+    status.className = "config-status ok";
     status.textContent = "Connected successfully! Data loaded.";
     logDebug("Connected! Loaded " + entries.length + " entries", "ok");
     updateConfigUI();
@@ -1259,7 +1305,7 @@ async function connectToExistingBin(){
     logDebug("Connect FAILED: " + e.message, "err");
     BIN_ID = "";
     API_KEY = "";
-    status.className = "err";
+    status.className = "config-status err";
     status.textContent = "Connection failed: " + e.message;
   }
 }
@@ -1304,47 +1350,17 @@ document.getElementById("btn-force-sync").addEventListener("click", async () => 
     return;
   }
   logDebug("Force sync started...", "warn");
-  showSyncStatus("Syncing local data to cloud...", "warn");
-  const ok = await saveEntries();
-  if(ok){
-    showSyncStatus("✅ Force sync successful! Cloud is up to date.", "ok");
-  } else {
-    showSyncStatus("❌ Force sync failed. Check debug log for details.", "err");
+  if(!cloudReady){
+    showSyncStatus("Reloading from the cloud first...", "warn");
+    await loadEntries();
+    if(cloudReady) showSyncStatus("✅ Reloaded the latest cloud data.", "ok");
+    else showSyncStatus("❌ Could not reach the cloud. Nothing was changed.", "err");
+    return;
   }
-});
-
-document.getElementById("btn-clear-local").addEventListener("click", () => {
-  if(!confirm("This will delete ONLY the local browser copy. Cloud data is untouched. Continue?")) return;
-  try{
-    localStorage.removeItem(LOCAL_KEY);
-    clearPVSnapshots();
-    entries = [];
-    pvSnapshots = [];
-    render();
-    showSyncStatus("🗑 Local data cleared. Reload to fetch from cloud.", "warn");
-    logDebug("Local entries cleared", "warn");
-  }catch(e){
-    logDebug("Clear local failed: " + e.message, "err");
-  }
-});
-
-document.getElementById("btn-disconnect").addEventListener("click", () => {
-  if(!confirm("This will disconnect from cloud AND clear all local data. You will need to reconnect. Continue?")) return;
-  try{
-    localStorage.removeItem(LOCAL_KEY);
-    localStorage.removeItem(CONFIG_KEY);
-    clearPVSnapshots();
-    entries = [];
-    pvSnapshots = [];
-    BIN_ID = "";
-    API_KEY = "";
-    render();
-    updateConfigUI();
-    showSyncStatus("🔌 Disconnected. All local data cleared.", "warn");
-    logDebug("Disconnected and cleared all local data", "warn");
-  }catch(e){
-    logDebug("Disconnect failed: " + e.message, "err");
-  }
+  showSyncStatus("Checking the cloud copy...", "warn");
+  const result = await saveEntries();
+  if(result.ok) showSyncStatus("✅ Cloud is up to date.", "ok");
+  else showSyncStatus("❌ " + result.message, "err");
 });
 
 document.getElementById("btn-toggle-debug").addEventListener("click", () => {
@@ -1424,6 +1440,11 @@ document.getElementById("add-btn").addEventListener("click", async () => {
     return;
   }
 
+  if(date > todayLocal()){
+    warnEl.textContent = "The date is in the future.\nChoose today or an earlier date.";
+    return;
+  }
+
   const { totalUnits } = computeLedger();
   let pv = null;
   if(totalUnits > 0){
@@ -1432,27 +1453,32 @@ document.getElementById("add-btn").addEventListener("click", async () => {
       return;
     }
     pv = parseFloat(pvRaw);
-    if(isNaN(pv) || pv < 0){
-      warnEl.textContent = "Portfolio Value Before must be a valid non-negative number.";
+    if(!(pv > 0)){
+      warnEl.textContent = "Portfolio Value Before must be more than zero.\nThe fund already holds units, so it cannot be worth nothing.";
       return;
     }
   } else {
     pv = pvRaw === "" ? 0 : parseFloat(pvRaw);
   }
 
-  entries.push({ date, member, amount, pv });
-  invalidateCache("all");
-  logDebug(`Adding entry: ${member} ₱${amount} (PV: ${pv})`, "ok");
+  // A back-dated entry must not replace a newer portfolio value
+  const lastValueDate = pvSnapshots.length > 0 ? pvSnapshots[pvSnapshots.length - 1].date : "";
+  const isNewest = date >= lastValueDate;
 
-  const saved = await saveEntries();
-  if(!saved){
-    warnEl.textContent = "⚠ Entry saved locally but NOT to cloud. Tap 'Force Sync to Cloud' to retry.";
-  }
+  logDebug(`Adding entry: ${member} ₱${amount} (PV: ${pv})`, "ok");
+  const saved = await commitChange(() => {
+    entries.push({ date, member, amount, pv });
+    // The fund is now worth what it was before, plus the new money
+    if(isNewest) savePVSnapshot(pv + amount, date);
+  }, warnEl);
+  if(!saved) return;  // the form stays filled in, so you can try again
 
   document.getElementById("f-amount").value = "";
   document.getElementById("f-pv").value = "";
   document.getElementById("f-member").value = "";
-  render();
+  if(!isNewest){
+    warnEl.textContent = `Entry saved.\nIt is dated before your last value update (${lastValueDate}), so the current value was not changed.\nCheck it, then press Update Portfolio Value.`;
+  }
 });
 
 // ============================================
@@ -1468,8 +1494,8 @@ document.getElementById("update-pv-btn").addEventListener("click", async () => {
     return;
   }
   const pv = parseFloat(pvRaw);
-  if(isNaN(pv) || pv < 0){
-    warnEl.textContent = "Portfolio value must be a valid non-negative number.";
+  if(!(pv > 0)){
+    warnEl.textContent = "Portfolio value must be more than zero.";
     return;
   }
 
@@ -1479,18 +1505,9 @@ document.getElementById("update-pv-btn").addEventListener("click", async () => {
     return;
   }
 
-  savePVSnapshot(pv);
-  invalidateCache("fundHist");
-  invalidateCache("memberHist");
-  invalidateCache("perf");
+  const saved = await commitChange(() => savePVSnapshot(pv), warnEl);
+  if(!saved) return;
   logDebug(`Updated portfolio value snapshot: ₱${pv}`, "ok");
-
-  const saved = await saveEntries();
-  if(!saved){
-    warnEl.textContent = "⚠ Portfolio value saved locally but NOT to cloud. Tap 'Force Sync to Cloud' to retry.";
-  }
-
-  render();
 
   // === SURGICAL FIX: Refresh analytics charts if user is on Analytics tab ===
   const analyticsPanel = document.getElementById("tab-analytics");
@@ -1511,13 +1528,13 @@ document.getElementById("update-pv-btn").addEventListener("click", async () => {
 // INIT
 // ============================================
 const hasConfig = loadConfig();
-loadPVSnapshots();
 updateConfigUI();
 if(hasConfig){
   loadEntries();
 } else {
   loadLocalEntries();
   invalidateCache("all");
+  syncPVInput();
   render();
 }
 
@@ -1570,23 +1587,22 @@ document.getElementById("modal-confirm").addEventListener("click", () => {
   hideConfirmModal();
 });
 
-// Override danger button handlers
-const originalClearLocal = document.getElementById("btn-clear-local").onclick;
-document.getElementById("btn-clear-local").addEventListener("click", (e) => {
-  e.stopImmediatePropagation();
+// Danger buttons: nothing happens until 0000 is typed and Confirm is pressed
+document.getElementById("btn-clear-local").addEventListener("click", () => {
   showConfirmModal(
     "🗑 Clear Local Data",
-    "This will delete ONLY the local browser copy. Cloud data is untouched. This cannot be undone.",
-    () => {
+    "This deletes ONLY the copy saved in this browser.\nThe cloud data is not touched, and is loaded again right after.",
+    async () => {
       try{
         localStorage.removeItem(LOCAL_KEY);
         clearPVSnapshots();
         entries = [];
-        pvSnapshots = [];
+        resetCloudState();
         invalidateCache("all");
-        render();
-        showSyncStatus("🗑 Local data cleared. Reload to fetch from cloud.", "warn");
         logDebug("Local entries cleared", "warn");
+        await loadEntries();
+        if(cloudReady) showSyncStatus("🗑 Local copy cleared and reloaded from the cloud.", "ok");
+        else showSyncStatus("🗑 Local copy cleared. The cloud could not be loaded.", "warn");
       }catch(e){
         logDebug("Clear local failed: " + e.message, "err");
       }
@@ -1594,22 +1610,21 @@ document.getElementById("btn-clear-local").addEventListener("click", (e) => {
   );
 });
 
-const originalDisconnect = document.getElementById("btn-disconnect").onclick;
-document.getElementById("btn-disconnect").addEventListener("click", (e) => {
-  e.stopImmediatePropagation();
+document.getElementById("btn-disconnect").addEventListener("click", () => {
   showConfirmModal(
     "🔌 Disconnect & Clear ALL",
-    "This will disconnect from cloud AND clear all local data. You will need to reconnect. This cannot be undone.",
+    "This disconnects from the cloud AND clears all data in this browser.\nYou will need to connect again. This cannot be undone.",
     () => {
       try{
         localStorage.removeItem(LOCAL_KEY);
         localStorage.removeItem(CONFIG_KEY);
         clearPVSnapshots();
         entries = [];
-        pvSnapshots = [];
+        resetCloudState();
         invalidateCache("all");
         BIN_ID = "";
         API_KEY = "";
+        syncPVInput();
         render();
         updateConfigUI();
         showSyncStatus("🔌 Disconnected. All local data cleared.", "warn");

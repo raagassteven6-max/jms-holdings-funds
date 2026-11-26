@@ -321,6 +321,19 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
 .ledger-gain.down{background:var(--loss-bg);color:var(--loss-text);}
 .status-banner{font-size:13.5px;font-weight:600;color:var(--danger);text-align:center;white-space:pre-line;}
 .status-banner:not(:empty){padding-top:10px;}
+/* Wide screens: give each figure its own column so long numbers still line up */
+@media(min-width:641px){
+  .ledger-pct{min-width:64px;text-align:right;}
+  .ledger-units{min-width:104px;}
+  .ledger-gain{min-width:156px;text-align:right;}
+}
+/* Phones: every member uses the same two lines, so the figures line up */
+@media(max-width:640px){
+  .ledger-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;}
+  .ledger-pct{text-align:right;}
+  .ledger-units{min-width:100px;}
+  .ledger-gain{grid-column:1/-1;justify-self:end;}
+}
 
 .notice,.screenshot-tip{margin-top:18px;padding:10px 14px;background:var(--well);border-left:3px solid var(--brass);font-size:13.5px;color:var(--ink-soft);}
 .notice strong,.screenshot-tip strong{color:var(--ink);}
@@ -928,6 +941,6 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
 </div>
 
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
