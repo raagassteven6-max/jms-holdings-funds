@@ -40,7 +40,7 @@
   .sub-panel{display:none;}
   .sub-panel.active{display:block;animation:fadeIn .25s ease;}
 
-  main{display:grid;grid-template-columns:1.1fr 1fr;gap:18px;}
+  main{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;}
   @media(max-width:860px){main{grid-template-columns:minmax(0,1fr);}}
 
   section.panel{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 2px rgba(16,24,40,0.04),0 1px 8px rgba(16,24,40,0.05);padding:22px;}
@@ -272,6 +272,65 @@
       margin-bottom: 8px;
     }
   }
+  .transfers-panel{max-width:760px;margin:0 auto;}
+  @media(max-width:400px){.tab-btn{padding:10px 11px;}}
+
+/* ---------- Unit transfers (same on both pages) ---------- */
+.transfer-card{margin-bottom:12px;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-left:4px solid #8a948f;border-radius:8px;}
+.transfer-card.is-pending{border-left-color:#d99a1e;}
+.transfer-card.is-overdue{border-left-color:#b91c1c;}
+.transfer-card.is-completed{border-left-color:#157a38;}
+.transfer-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;}
+.transfer-chip{padding:2px 8px;border-radius:4px;background:#eceeed;color:#3f4a46;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+.is-pending .transfer-chip{background:#fdefc6;color:#6f4a0c;}
+.is-overdue .transfer-chip{background:#fdeaea;color:#7f1d1d;}
+.is-completed .transfer-chip{background:#e3f6e8;color:#14532d;}
+.transfer-no{font-size:12.5px;color:var(--ink-soft);}
+.transfer-card .transfer-title{margin:10px 0;font-size:17px;overflow-wrap:anywhere;}
+.transfer-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px 14px;margin:0;}
+.transfer-facts dt{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);}
+.transfer-facts dd{margin:2px 0 0;font-size:14px;font-weight:700;overflow-wrap:anywhere;}
+.transfer-buyers{margin:12px 0 0;padding:8px 0 0;border-top:1px solid var(--line);list-style:none;font-size:13.5px;}
+.transfer-buyers li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;padding:2px 0;}
+.transfer-reason{margin:8px 0 0;font-size:13px;color:var(--ink-soft);}
+.transfer-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.ledger-row{flex-wrap:wrap;}
+.ledger-note{flex-basis:100%;grid-column:1/-1;text-align:right;font-size:12px;color:var(--ink-soft);}
+.member-note{margin:-6px 0 16px;font-size:13.5px;font-weight:600;color:var(--ink-soft);white-space:pre-line;}
+.member-note:empty{display:none;}
+
+/* ---------- Transfer certificate ---------- */
+.cert-view{display:none;position:fixed;inset:0;z-index:9999;overflow:auto;background:#fff;}
+.cert-page{max-width:720px;margin:0 auto;padding:36px 32px;color:#111;font-size:13px;line-height:1.45;}
+.cert-header{margin-bottom:18px;padding-bottom:14px;border-bottom:5px double #0b2e29;text-align:center;}
+.cert-fund{font-family:Lora,Georgia,serif;font-size:22px;font-weight:700;letter-spacing:.1em;}
+.cert-title{margin-top:4px;font-size:13px;font-weight:700;letter-spacing:.16em;}
+.cert-no{margin-top:8px;font-size:13px;}
+.cert-copy{margin-bottom:14px;padding:6px 10px;border:1.5px dashed #555;text-align:center;font-weight:700;}
+.cert-void{margin-bottom:14px;padding:8px 12px;border:4px solid #b91c1c;color:#b91c1c;text-align:center;}
+.cert-void strong{display:block;font-size:34px;letter-spacing:.3em;}
+.cert-facts{margin:0 0 18px;}
+.cert-facts div{display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px dotted #bbb;}
+.cert-facts dt{color:#555;}
+.cert-facts dd{margin:0;text-align:right;font-weight:700;overflow-wrap:anywhere;}
+.cert-table{width:100%;margin-bottom:18px;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;}
+.cert-table th{padding:6px 4px;border-bottom:1.5px solid #222;text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#555;}
+.cert-table td{padding:6px 4px;border-bottom:1px solid #ddd;overflow-wrap:anywhere;}
+.cert-signs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:40px 28px;margin-top:48px;}
+.cert-sign{padding-top:5px;border-top:1px solid #222;text-align:center;font-size:11px;color:#555;}
+.cert-sign span{display:block;font-size:13px;font-weight:700;color:#111;}
+.cert-footer{margin-top:32px;padding-top:12px;border-top:1px solid #ccc;text-align:center;font-size:11.5px;color:#666;}
+@media print{
+  body.print-cert{min-height:0;padding:0;background:#fff;}
+  body.print-cert .shell,body.print-cert .modal-overlay,body.print-cert #print-fund-view{display:none !important;}
+  body.print-cert .cert-view{display:block !important;position:static;overflow:visible;}
+  body.print-cert .cert-view,body.print-cert .cert-view *{visibility:visible;}
+  body:not(.print-cert) .cert-view{display:none !important;}
+  .cert-page{padding:8px;}
+  .cert-table tr,.cert-signs,.cert-footer{break-inside:avoid;}
+  /* Keep the transfers title on the same page as its table */
+  #stmt-transfer-section{break-inside:avoid;}
+}
 </style>
 </head>
 <body>
@@ -289,6 +348,7 @@
   <div class="tab-nav">
     <button class="tab-btn active" data-tab="overview">Overview</button>
     <button class="tab-btn" data-tab="analytics">Analytics</button>
+    <button class="tab-btn" data-tab="transfers" id="transfer-tab-btn">Transfers</button>
   </div>
 
   <div class="tab-panel active" id="tab-overview">
@@ -370,6 +430,7 @@
             <div class="me-stat"><div class="me-stat-value mono" id="me-gain-loss">₱0.00</div><div class="me-stat-label">Gain / Loss</div></div>
             <div class="me-stat"><div class="me-stat-value mono" id="me-gain-pct">0.00%</div><div class="me-stat-label">Return %</div></div>
           </div>
+          <div class="member-note" id="me-note" style="margin:10px 0 0;"></div>
         </div>
         <div class="chart-wrap">
           <div class="chart-box">
@@ -390,6 +451,8 @@
             <li>Value per unit (shown as NAV) = fund value ÷ total units.</li>
             <li>Your value = your units × value per unit.</li>
             <li>Adding money buys units at that day's value, so it doesn't change the value of anyone else's units.</li>
+            <li>A transfer moves units between members. The fund's total stays the same.</li>
+            <li>After a transfer, your gain compares your value with what your current units cost you. Gains from units already sold show as "realized".</li>
           </ul>
           <div style="margin-top:6px;">Green means your share is worth more than you put in. Red means it's worth less.</div>
         </div>
@@ -438,12 +501,13 @@
             <div class="snapshot-card"><div class="value mono" id="snap-current">₱0.00</div><div class="label">Current Value</div></div>
             <div class="snapshot-card"><div class="value mono" id="snap-return">0.00%</div><div class="label">Total Return</div></div>
           </div>
+          <div class="member-note" id="snap-note"></div>
           <div class="chart-card">
             <div class="chart-title"><span class="dot" style="background:var(--an-teal);"></span> Member NAV vs Share Value Over Time</div>
             <div class="legend-inline"><div class="item"><span class="dot" style="background:var(--an-teal);"></span> Avg Cost (NAV)</div><div class="item"><span class="dot" style="background:var(--an-amber);"></span> Share Value</div></div>
             <div class="chart-scroll"><div class="chart-area small" id="member-chart-wrap"><canvas id="member-chart"></canvas></div></div>
           </div>
-          <h3 style="margin-top:18px;">Contribution History</h3>
+          <h3 style="margin-top:18px;">Contribution &amp; Transfer History</h3>
           <div class="table-scroll-wrap">
             <table class="member-history-table" id="member-history-table">
               <thead><tr><th>Date</th><th>Amount</th><th>Fund NAV</th><th>Units</th><th>Avg Cost</th><th>Share Value</th></tr></thead>
@@ -459,6 +523,14 @@
     </div>
   </div>
 
+
+  <div class="tab-panel" id="tab-transfers">
+    <section class="panel transfers-panel">
+      <h2>Unit Transfers</h2>
+      <div class="notice" style="margin-bottom:14px;">Only the treasurer can start or change a transfer. Units in a pending transfer still belong to the seller until payment is confirmed.</div>
+      <div id="t-list"></div>
+    </section>
+  </div>
 
     <!-- Print Statement View (hidden, shown via print dialog) -->
     <div id="print-statement-view" style="display:none;">
@@ -482,7 +554,11 @@
         <div class="statement-section">
           <div class="statement-section-title">YOUR HOLDINGS</div>
           <div class="statement-row"><span>Total Contributions</span><span class="mono" id="stmt-contrib">—</span></div>
+          <div class="statement-row stmt-trade-row"><span>Paid for Units Bought</span><span class="mono" id="stmt-bought">—</span></div>
+          <div class="statement-row stmt-trade-row"><span>Cost of Current Units</span><span class="mono" id="stmt-cost">—</span></div>
+          <div class="statement-row stmt-trade-row"><span>Realized Gain/Loss from Sales</span><span class="mono" id="stmt-realized">—</span></div>
           <div class="statement-row"><span>Units Owned</span><span class="mono" id="stmt-units">—</span></div>
+          <div class="statement-row" id="stmt-reserved-row"><span>Units Set Aside for Pending Transfers</span><span class="mono" id="stmt-reserved">—</span></div>
           <div class="statement-row"><span>Ownership %</span><span class="mono" id="stmt-pct">—</span></div>
           <div class="statement-row"><span>Current Value</span><span class="mono" id="stmt-current">—</span></div>
           <div class="statement-row"><span>Unrealized Gain/Loss</span><span class="mono" id="stmt-gain">—</span></div>
@@ -493,6 +569,13 @@
           <table class="statement-table">
             <thead><tr><th>Date</th><th>Amount</th><th>Fund NAV</th><th>Units</th><th>Avg Cost</th><th>Share Value</th></tr></thead>
             <tbody id="stmt-history-body"></tbody>
+          </table>
+        </div>
+        <div class="statement-section" id="stmt-transfer-section">
+          <div class="statement-section-title">UNIT TRANSFERS</div>
+          <table class="statement-table">
+            <thead><tr><th>Completed</th><th>Certificate</th><th>Details</th><th>Units</th><th>Amount</th></tr></thead>
+            <tbody id="stmt-transfer-body"></tbody>
           </table>
         </div>
         <div class="statement-footer">
@@ -509,6 +592,8 @@
   </div>
 </div>
 
+<div id="print-cert-view" class="cert-view"></div>
+
 <script>
 // ============================================
 // CONFIGURATION
@@ -519,6 +604,7 @@ const HARDCODED_API_KEY = "";
 const PALETTE = ["#0f766e", "#f59e0b", "#6366f1", "#dc2626", "#0891b2", "#7c3aed", "#65a30d", "#db2777"];
 let entries = [];
 let pvSnapshots = []; // Array of {date, value} for permanent PV history
+let transfers = [];   // unit transfers between members
 let chart = null;
 let myName = "";
 
@@ -532,6 +618,352 @@ const MY_NAME_KEY = "jms_member_name_v1";
 let fundChart = null;
 let contribChart = null;
 let memberChart = null;
+
+// ============================================================
+// UNIT TRANSFERS: SHARED BLOCK
+// The admin page and the member page carry the same copy of this block.
+// If you change it in one file, change it in the other too.
+// ============================================================
+const UNIT_DUST = 0.000001;  // unit differences smaller than this are rounding noise
+const PAYMENT_DAYS = 7;
+
+// ---------- Reading the cloud data ----------
+
+// Turns what the bin returned into {entries, pvSnapshots, transfers}.
+// Anything else is refused, so an unrelated bin is never overwritten.
+function parseFundData(data){
+  if(Array.isArray(data)) return { entries: data, pvSnapshots: [], transfers: [] };
+  // Once transfers exist, contributions are saved under "contributions".
+  // Older copies of the app don't recognise that, so they cannot overwrite the transfers.
+  const list = data?.version === 2 ? data.contributions : data?.version === undefined ? data?.entries : null;
+  if(Array.isArray(list)){
+    return { entries: list, pvSnapshots: data.pvSnapshots || [], transfers: data.transfers || [] };
+  }
+  throw new Error("This bin does not contain fund data this page can read.");
+}
+
+// ---------- Dates ----------
+
+// Today's date in the Philippines (YYYY-MM-DD), wherever this device is
+function todayLocal(){
+  const parts = new Intl.DateTimeFormat("en-US", {timeZone:"Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit"}).formatToParts(new Date());
+  const part = type => parts.find(p => p.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+// "2026-11-26" becomes "November 26, 2026"
+function formatDate(isoDate){
+  if(!isoDate) return "";
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"});
+}
+
+// A saved moment, shown in Philippine time
+function formatDateTime(timestamp){
+  return new Date(timestamp).toLocaleString("en-US", {timeZone:"Asia/Manila", year:"numeric", month:"long", day:"numeric", hour:"numeric", minute:"2-digit"});
+}
+
+// Transfer prices need more decimals, so that units × price matches the amount paid
+function fmtPrice(n){
+  return "₱" + Number(n).toFixed(6);
+}
+
+// A difference smaller than half a centavo is zero, so it never shows as "-0.00"
+function noTinyAmount(n){
+  return Math.abs(n) < 0.005 ? 0 : n;
+}
+
+function fmtSignedPeso(n){
+  const amount = noTinyAmount(n);
+  return (amount >= 0 ? "+" : "") + fmtPeso(amount);
+}
+
+// ---------- Transfer facts ----------
+
+const sumOf = (list, key) => list.reduce((total, item) => total + item[key], 0);
+const transferUnits = t => sumOf(t.buyers, "units");
+const transferAmount = t => sumOf(t.buyers, "amount");
+const isOverdue = t => t.status === "pending" && todayLocal() > t.dueDate;
+const buyerNames = t => t.buyers.map(b => b.name).join(", ");
+
+function transferStatusLabel(t){
+  if(isOverdue(t)) return "Overdue";
+  return {pending:"Pending payment", completed:"Completed", cancelled:"Cancelled", voided:"Voided"}[t.status] ?? t.status;
+}
+
+// Units a member has promised in pending transfers. They still own them until completion.
+function reservedUnits(name){
+  return transfers
+    .filter(t => t.status === "pending" && t.seller === name)
+    .reduce((total, t) => total + transferUnits(t), 0);
+}
+
+// ---------- Who owns what ----------
+
+// Contributions first, then every completed transfer.
+// cost = what the units a member holds now cost them
+// realized = gain or loss already taken by selling units
+function memberHoldings(rows){
+  const holdings = Object.create(null);
+  const holdingFor = name => holdings[name] ??= {units:0, cost:0, contributed:0, bought:0, realized:0, traded:false};
+
+  for(const r of rows){
+    if(r.unitsIssued === null) continue;
+    const h = holdingFor(r.member);
+    h.units += r.unitsIssued;
+    h.cost += r.amount;
+    h.contributed += r.amount;
+  }
+
+  for(const t of transfers){
+    if(t.status !== "completed") continue;
+    const seller = holdingFor(t.seller);
+    seller.units -= transferUnits(t);
+    seller.cost -= t.costMoved;
+    seller.realized += transferAmount(t) - t.costMoved;
+    seller.traded = true;
+    for(const b of t.buyers){
+      const buyer = holdingFor(b.name);
+      buyer.units += b.units;
+      buyer.cost += b.amount;
+      buyer.bought += b.amount;
+      buyer.traded = true;
+    }
+  }
+
+  for(const h of Object.values(holdings)){
+    if(Math.abs(h.units) < UNIT_DUST) h.units = 0;
+    if(Math.abs(h.cost) < 0.005) h.cost = 0;
+  }
+  return holdings;
+}
+
+function computeOwnership(rows, totalUnits){
+  const list = Object.entries(memberHoldings(rows)).map(([name, h]) => ({
+    name,
+    units: h.units,
+    pct: totalUnits > 0 ? (h.units / totalUnits) * 100 : 0,
+    totalContributed: h.cost,   // cost of the units held now
+    contributed: h.contributed, // money this member put into the fund
+    bought: h.bought,
+    realized: h.realized,
+    traded: h.traded
+  }));
+  list.sort((a,b) => b.units - a.units);
+  return list;
+}
+
+// Everyone who has contributed, or taken part in a completed transfer
+function memberNames(){
+  const traded = transfers.filter(t => t.status === "completed").flatMap(t => [t.seller, ...t.buyers.map(b => b.name)]);
+  return [...new Set([...entries.map(e => e.member), ...traded].filter(Boolean))];
+}
+
+// One member's figures today (null until the fund has a value)
+function memberPosition(name){
+  const { rows, totalUnits } = computeLedger();
+  const perf = computePerformance(computeOwnership(rows, totalUnits), totalUnits);
+  return perf?.memberPerf.find(m => m.name === name) ?? null;
+}
+
+// The headline figures for one member, used by the analytics cards and the statement
+function memberFigures(name, history){
+  const holding = memberHoldings(computeLedger().rows)[name];
+  const cost = holding?.cost ?? 0;
+  const value = memberPosition(name)?.currentValue ?? history.at(-1).shareValue;
+  return {
+    cost, value,
+    units: holding?.units ?? 0,
+    contributed: holding?.contributed ?? 0,
+    bought: holding?.bought ?? 0,
+    realized: holding?.realized ?? 0,
+    traded: holding?.traded ?? false,
+    gain: noTinyAmount(value - cost),
+    returnPct: cost > 0 ? (noTinyAmount(value - cost) / cost) * 100 : 0
+  };
+}
+
+// Extra lines about a member's transfers (empty when there is nothing to say)
+function memberNotes(name){
+  const realized = memberHoldings(computeLedger().rows)[name]?.realized ?? 0;
+  const reserved = reservedUnits(name);
+  const notes = [];
+  if(Math.abs(realized) >= 0.005) notes.push(`Realized from units sold: ${fmtSignedPeso(realized)}`);
+  if(reserved > 0) notes.push(`${fmtUnits(reserved)} units set aside for a pending transfer`);
+  return notes;
+}
+
+// A member's story over time: contributions, transfers, and the value at each point
+function buildMemberHistory(memberName){
+  const key = memberName + "|" + _fullKey();
+  if(_CACHE.memberHist[key]) return _CACHE.memberHist[key];
+
+  const { rows, totalUnits } = computeLedger();
+  const moves = transfers
+    .filter(t => t.status === "completed" && (t.seller === memberName || t.buyers.some(b => b.name === memberName)))
+    .sort((a,b) => a.certificateNo.localeCompare(b.certificateNo));
+
+  const history = [];
+  let cost = 0;
+  let units = 0;
+
+  const addPoint = (date, nav, extra = {}) => history.push({
+    date, type:"value", amount:0, fundNav:nav, unitsIssued:0, ...extra,
+    memberTotalContrib: cost,
+    memberTotalUnits: units,
+    avgCost: units > 0 ? cost / units : 0,
+    shareValue: units * nav
+  });
+
+  const addTransfer = t => {
+    const purchase = t.buyers.find(b => b.name === memberName);
+    const unitChange = purchase ? purchase.units : -transferUnits(t);
+    const amount = purchase ? purchase.amount : transferAmount(t);
+    units += unitChange;
+    cost += purchase ? amount : -t.costMoved;
+    if(Math.abs(units) < UNIT_DUST) units = 0;
+    if(Math.abs(cost) < 0.005) cost = 0;
+    addPoint(t.completedDate, t.price, {type: purchase ? "bought" : "sold", amount, unitsIssued: unitChange, transfer: t});
+  };
+
+  let next = 0;
+  for(const r of rows){
+    if(r.nav === null) continue;
+    while(next < moves.length && moves[next].completedDate < r.date) addTransfer(moves[next++]);
+    if(r.member === memberName){
+      cost += r.amount;
+      units += r.unitsIssued;
+      addPoint(r.date, r.nav, {type:"contribution", amount:r.amount, unitsIssued:r.unitsIssued});
+    } else if(units > 0){
+      // The value of this member's units also moves when others contribute
+      addPoint(r.date, r.nav);
+    }
+  }
+  while(next < moves.length) addTransfer(moves[next++]);
+
+  // Points from portfolio value updates
+  if(units > 0 && totalUnits > 0){
+    const lastDate = history.at(-1).date;
+    for(const snap of pvSnapshots){
+      if(snap.date >= lastDate) addPoint(snap.date, snap.value / totalUnits);
+    }
+    // A transfer is priced on its agreement day, so finish the line at today's value
+    const last = history.at(-1);
+    if(last.type === "bought" || last.type === "sold") addPoint(last.date, getLatestPV() / totalUnits);
+  }
+
+  _CACHE.memberHist[key] = history;
+  return history;
+}
+
+// The Amount column in a member's history table
+function historyAmount(h){
+  const label = {bought:"Bought ", sold:"Sold "}[h.type] ?? "";
+  return label + fmtPeso(h.amount);
+}
+
+// ---------- Showing transfers ----------
+
+function transferCardHtml(t, actionsHtml = ""){
+  const fact = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  const facts = [
+    fact("Units", fmtUnits(transferUnits(t))),
+    fact(t.status === "completed" ? "Amount paid" : "Amount", fmtPeso(transferAmount(t))),
+    fact("Value per unit", fmtPrice(t.price)),
+    fact("Agreed", formatDate(t.agreedDate)),
+  ];
+  if(t.status === "pending") facts.push(fact("Pay by", formatDate(t.dueDate)));
+  if(t.completedDate) facts.push(fact("Completed", formatDate(t.completedDate)));
+  if(t.cancelledDate) facts.push(fact("Cancelled", formatDate(t.cancelledDate)));
+  if(t.voidedDate) facts.push(fact("Voided", formatDate(t.voidedDate)));
+
+  const buyers = t.buyers.map(b => `
+    <li><strong>${escapeHtml(b.name)}</strong><span class="mono">${fmtUnits(b.units)} units for ${fmtPeso(b.amount)}</span></li>`).join("");
+  const reason = t.voidReason || t.cancelReason;
+  const style = isOverdue(t) ? "overdue" : t.status;
+
+  return `
+    <article class="transfer-card is-${style}">
+      <div class="transfer-head">
+        <span class="transfer-chip">${transferStatusLabel(t)}</span>
+        <span class="transfer-no mono">${t.certificateNo ?? ""}</span>
+      </div>
+      <h3 class="transfer-title">${escapeHtml(t.seller)} → ${escapeHtml(buyerNames(t))}</h3>
+      <dl class="transfer-facts">${facts.join("")}</dl>
+      <ul class="transfer-buyers">${buyers}</ul>
+      ${reason ? `<p class="transfer-reason">Reason: ${escapeHtml(reason)}</p>` : ""}
+      ${actionsHtml ? `<div class="transfer-actions">${actionsHtml}</div>` : ""}
+    </article>`;
+}
+
+// Open transfers first (nearest deadline first), then history (newest first)
+function sortedTransfers(){
+  const open = transfers.filter(t => t.status === "pending").sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  const closed = transfers.filter(t => t.status !== "pending").sort((a,b) => b.agreedAt.localeCompare(a.agreedAt));
+  return [...open, ...closed];
+}
+
+function updateTransferCount(){
+  const open = transfers.filter(t => t.status === "pending").length;
+  document.getElementById("transfer-tab-btn").textContent = open ? `Transfers (${open})` : "Transfers";
+}
+
+// ---------- Certificate ----------
+
+function certificateHtml(t, isMemberCopy){
+  const buyerRows = t.buyers.map(b => `
+    <tr><td>${escapeHtml(b.name)}</td><td>${fmtUnits(b.units)}</td><td>${fmtPeso(b.amount)}</td><td>${escapeHtml(b.paymentRef) || "—"}</td></tr>`).join("");
+  const parties = [
+    {name: t.seller, role: "Seller", before: t.sellerUnitsBefore, after: t.sellerUnitsAfter},
+    ...t.buyers.map(b => ({name: b.name, role: "Buyer", before: b.unitsBefore, after: b.unitsAfter}))
+  ];
+  const holdingRows = parties.map(p => `
+    <tr><td>${escapeHtml(p.name)} (${p.role})</td><td>${fmtUnits(p.before)}</td><td>${fmtUnits(p.after)}</td></tr>`).join("");
+  const signatures = [...parties, {name:"", role:"Treasurer"}].map(p => `
+    <div class="cert-sign"><span>${escapeHtml(p.name) || "&nbsp;"}</span>${p.role}</div>`).join("");
+
+  return `
+    <div class="cert-page">
+      ${t.status === "voided" ? `<div class="cert-void"><strong>VOID</strong>Voided on ${formatDate(t.voidedDate)}. Reason: ${escapeHtml(t.voidReason)}</div>` : ""}
+      ${isMemberCopy ? `<div class="cert-copy">Member copy. The signed original is kept by the treasurer.</div>` : ""}
+      <div class="cert-header">
+        <div class="cert-fund">JMS HOLDINGS FUND</div>
+        <div class="cert-title">UNIT TRANSFER CERTIFICATE</div>
+        <div class="cert-no">No. ${t.certificateNo}</div>
+      </div>
+      <dl class="cert-facts">
+        <div><dt>Date agreed (price set)</dt><dd>${formatDate(t.agreedDate)}</dd></div>
+        <div><dt>Date completed (units moved)</dt><dd>${formatDateTime(t.completedAt)}, Philippine time</dd></div>
+        <div><dt>From</dt><dd>${escapeHtml(t.seller)}</dd></div>
+        <div><dt>To</dt><dd>${escapeHtml(buyerNames(t))}</dd></div>
+        <div><dt>Units transferred</dt><dd>${fmtUnits(transferUnits(t))}</dd></div>
+        <div><dt>Value per unit</dt><dd>${fmtPrice(t.price)}</dd></div>
+        <div><dt>Total amount paid</dt><dd>${fmtPeso(transferAmount(t))}</dd></div>
+      </dl>
+      <table class="cert-table">
+        <thead><tr><th>Buyer</th><th>Units</th><th>Amount paid</th><th>Payment reference</th></tr></thead>
+        <tbody>${buyerRows}</tbody>
+      </table>
+      <table class="cert-table">
+        <thead><tr><th>Holdings</th><th>Units before</th><th>Units after</th></tr></thead>
+        <tbody>${holdingRows}</tbody>
+      </table>
+      <div class="cert-signs">${signatures}</div>
+      <div class="cert-footer">Internal family record of JMS Holdings.</div>
+    </div>`;
+}
+
+function printCertificate(id, isMemberCopy){
+  const t = transfers.find(x => x.id === id);
+  if(!t?.certificateNo) return;
+  const view = document.getElementById("print-cert-view");
+  view.innerHTML = certificateHtml(t, isMemberCopy);
+  // This tells the print layout to print the certificate and nothing else
+  document.body.classList.add("print-cert");
+  view.style.display = "block";
+  window.print();
+  setTimeout(() => { view.style.display = "none"; }, 500);
+}
 
 const debugLines = [];
 function logDebug(msg, type="info"){
@@ -637,22 +1069,10 @@ async function loadEntries(){
   }
 
   try{
-    const data = await jsonbinRead();
-    if(data && typeof data === "object"){
-      if(Array.isArray(data.entries)){
-        entries = data.entries;
-        pvSnapshots = data.pvSnapshots || [];
-      } else if(Array.isArray(data)){
-        entries = data;
-        pvSnapshots = [];
-      } else {
-        entries = [];
-        pvSnapshots = [];
-      }
-    } else {
-      entries = [];
-      pvSnapshots = [];
-    }
+    const data = parseFundData(await jsonbinRead());
+    entries = data.entries;
+    pvSnapshots = data.pvSnapshots;
+    transfers = data.transfers;
     banner.textContent = "";
     if(lastSync){
       lastSync.textContent = "Last synced: " + new Date().toLocaleTimeString();
@@ -690,7 +1110,7 @@ function _pvKey(){
   return `${pvSnapshots.length}|${last.date || ""}|${last.value || 0}`;
 }
 
-function _fullKey(){ return _entriesKey() + "||" + _pvKey(); }
+function _fullKey(){ return _entriesKey() + "||" + _pvKey() + "||" + JSON.stringify(transfers); }
 
 function _cacheHit(level, key){
   if(_CACHE[level].key === key){
@@ -760,22 +1180,6 @@ function computeLedger(){
   return result;
 }
 
-function computeOwnership(rows, totalUnits){
-  const byMember = {};
-  const memberContributions = {};
-  for(const r of rows){
-    if(r.unitsIssued === null) continue;
-    byMember[r.member] = (byMember[r.member] || 0) + r.unitsIssued;
-    memberContributions[r.member] = (memberContributions[r.member] || 0) + r.amount;
-  }
-  const list = Object.entries(byMember).map(([name, units]) => ({
-    name, units, pct: totalUnits > 0 ? (units / totalUnits) * 100 : 0,
-    totalContributed: memberContributions[name] || 0
-  }));
-  list.sort((a,b) => b.units - a.units);
-  return list;
-}
-
 function getLatestPV(){
   if(!pvSnapshots || pvSnapshots.length === 0) return null;
   return pvSnapshots[pvSnapshots.length - 1].value;
@@ -783,10 +1187,7 @@ function getLatestPV(){
 
 // The date of the latest value written out in full, e.g. "November 26, 2026"
 function formatValueDate(){
-  const isoDate = pvSnapshots[pvSnapshots.length - 1]?.date;
-  if(!isoDate) return "";
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"});
+  return formatDate(pvSnapshots.at(-1)?.date);
 }
 
 // Fills every "Values as of" line, and leaves them empty when there is nothing to value
@@ -809,14 +1210,15 @@ function computePerformance(ownership, totalUnits){
     return null;
   }
   const currentNav = latestPV / totalUnits;
-  const totalContributed = ownership.reduce((sum, m) => sum + m.totalContributed, 0);
+  // Only money put into the fund counts. Transfers move money between members.
+  const totalContributed = sumOf(ownership, "contributed");
   const totalCurrentValue = latestPV;
   const gainLoss = totalCurrentValue - totalContributed;
   const gainLossPct = totalContributed > 0 ? (gainLoss / totalContributed) * 100 : 0;
 
   const memberPerf = ownership.map(m => {
     const currentValue = m.units * currentNav;
-    const gain = currentValue - m.totalContributed;
+    const gain = noTinyAmount(currentValue - m.totalContributed);
     const gainPct = m.totalContributed > 0 ? (gain / m.totalContributed) * 100 : 0;
     return {...m, currentValue, gain, gainPct, currentNav};
   });
@@ -842,14 +1244,10 @@ function render(){
 
   const dl = document.getElementById("member-list");
   dl.innerHTML = "";
-  const seen = new Set();
-  entries.forEach(e => {
-    if(e.member && !seen.has(e.member)){
-      seen.add(e.member);
-      const opt = document.createElement("option");
-      opt.value = e.member;
-      dl.appendChild(opt);
-    }
+  memberNames().forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    dl.appendChild(opt);
   });
 
   const tbody = document.getElementById("log-body");
@@ -913,7 +1311,10 @@ function render(){
   const meData = perf ? perf.memberPerf.find(m => myName && m.name.toLowerCase() === myName.toLowerCase()) : null;
   if(meData){
     meCard.classList.add("visible");
-    document.getElementById("me-total-contrib").textContent = fmtPeso(meData.totalContributed);
+    const costEl = document.getElementById("me-total-contrib");
+    costEl.textContent = fmtPeso(meData.totalContributed);
+    costEl.nextElementSibling.textContent = meData.traded ? "Cost of Units" : "Contributed";
+    document.getElementById("me-note").textContent = memberNotes(meData.name).join("\n");
     document.getElementById("me-current-value").textContent = fmtPeso(meData.currentValue);
     document.getElementById("me-units").textContent = fmtUnits(meData.units);
     document.getElementById("me-pct").textContent = meData.pct.toFixed(2) + "%";
@@ -948,7 +1349,9 @@ function render(){
       let gainHtml = "";
       if(perf){
         const mp = perf.memberPerf.find(x => x.name === m.name);
-        if(mp){
+        if(mp && mp.traded && mp.units === 0){
+          gainHtml = `<span class="ledger-gain">All units sold</span>`;
+        } else if(mp){
           const isGain = mp.gain >= 0;
           gainHtml = `<span class="ledger-gain ${isGain ? 'up' : 'down'}">${isGain ? '+' : ''}${fmtPeso(mp.gain).replace('₱','')} (${isGain ? '+' : ''}${mp.gainPct.toFixed(2)}%)</span>`;
         }
@@ -959,6 +1362,7 @@ function render(){
         <span class="ledger-pct">${m.pct.toFixed(2)}%</span>
         <span class="ledger-units mono">${fmtUnits(m.units)} u</span>
         ${gainHtml}
+        ${memberNotes(m.name).map(note => `<span class="ledger-note">${note}</span>`).join("")}
       `;
       ledgerList.appendChild(row);
     });
@@ -1019,6 +1423,8 @@ function render(){
       }
     });
   }
+
+  renderTransfers();
 }
 
 function escapeHtml(s){
@@ -1262,85 +1668,10 @@ function renderFundAnalytics(){
 // ============================================
 // ANALYTICS - MEMBER METRICS
 // ============================================
-function buildMemberHistory(memberName){
-  const key = memberName + "|" + _fullKey();
-  if(_CACHE.memberHist[key]){
-    logDebug("CACHE HIT: buildMemberHistory(" + memberName + ")", "ok");
-    return _CACHE.memberHist[key];
-  }
-
-  const { rows } = computeLedger();
-  if(rows.length === 0) return [];
-
-  const memberRows = [];
-  let memberTotalContrib = 0;
-  let memberTotalUnits = 0;
-
-  for(const r of rows){
-    if(r.nav === null) continue;
-
-    if(r.member === memberName){
-      memberTotalContrib += r.amount;
-      memberTotalUnits += r.unitsIssued || 0;
-      const avgCost = memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0;
-
-      memberRows.push({
-        date: r.date,
-        amount: r.amount,
-        fundNav: r.nav,
-        unitsIssued: r.unitsIssued,
-        memberTotalContrib: memberTotalContrib,
-        memberTotalUnits: memberTotalUnits,
-        avgCost: avgCost,
-        shareValue: memberTotalUnits * r.nav
-      });
-    } else {
-      if(memberTotalUnits > 0){
-        memberRows.push({
-          date: r.date,
-          amount: 0,
-          fundNav: r.nav,
-          unitsIssued: 0,
-          memberTotalContrib: memberTotalContrib,
-          memberTotalUnits: memberTotalUnits,
-          avgCost: memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0,
-          shareValue: memberTotalUnits * r.nav
-        });
-      }
-    }
-  }
-
-  // Add PV snapshot points
-  if(pvSnapshots.length > 0 && memberTotalUnits > 0){
-    const { totalUnits } = computeLedger();
-    const lastEntryDate = memberRows.length > 0 ? memberRows[memberRows.length - 1].date : null;
-    for(const snap of pvSnapshots){
-      if(lastEntryDate && snap.date < lastEntryDate) continue;
-      const currentNav = totalUnits > 0 ? snap.value / totalUnits : 1;
-      memberRows.push({
-        date: snap.date,
-        amount: 0,
-        fundNav: currentNav,
-        unitsIssued: 0,
-        memberTotalContrib: memberTotalContrib,
-        memberTotalUnits: memberTotalUnits,
-        avgCost: memberTotalUnits > 0 ? memberTotalContrib / memberTotalUnits : 0,
-        shareValue: memberTotalUnits * currentNav
-      });
-    }
-  }
-
-  _CACHE.memberHist[key] = memberRows;
-  logDebug("CACHE SET: buildMemberHistory(" + memberName + ")", "ok");
-  return memberRows;
-}
-
 function populateMemberSelector(){
   const select = document.getElementById("member-select");
   const currentVal = select.value;
-
-  const members = [...new Set(entries.map(e => e.member).filter(m => m))];
-  members.sort();
+  const members = memberNames().sort();
 
   select.innerHTML = '<option value="">Choose a member...</option>';
   members.forEach(m => {
@@ -1375,15 +1706,17 @@ function renderMemberAnalytics(){
     return;
   }
 
-  const latest = history[history.length - 1];
-  const totalReturn = latest.memberTotalContrib > 0 ? ((latest.shareValue - latest.memberTotalContrib) / latest.memberTotalContrib) * 100 : 0;
+  const figures = memberFigures(memberName, history);
+  const totalReturn = figures.returnPct;
 
   const snapContrib = document.getElementById("snap-contributed");
   const snapCurrent = document.getElementById("snap-current");
   const snapReturn = document.getElementById("snap-return");
 
-  snapContrib.textContent = fmtPeso(latest.memberTotalContrib);
-  snapCurrent.textContent = fmtPeso(latest.shareValue);
+  snapContrib.textContent = fmtPeso(figures.cost);
+  snapContrib.nextElementSibling.textContent = figures.traded ? "Cost of Current Units" : "Total Contributed";
+  document.getElementById("snap-note").textContent = memberNotes(memberName).join("\n");
+  snapCurrent.textContent = fmtPeso(figures.value);
   snapReturn.textContent = (totalReturn >= 0 ? "+" : "") + totalReturn.toFixed(2) + "%";
   snapReturn.className = "value mono " + (totalReturn >= 0 ? "gain" : "loss");
 
@@ -1485,11 +1818,11 @@ function renderMemberAnalytics(){
   const tbody = document.getElementById("member-history-body");
   tbody.innerHTML = "";
 
-  history.filter(h => h.amount > 0).forEach(h => {
+  history.filter(h => h.type !== "value").forEach(h => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono">${h.date}</td>
-      <td class="mono">${fmtPeso(h.amount)}</td>
+      <td class="mono">${historyAmount(h)}</td>
       <td class="mono">${h.fundNav.toFixed(4)}</td>
       <td class="mono">${fmtUnits(h.unitsIssued)}</td>
       <td class="mono">${h.avgCost.toFixed(4)}</td>
@@ -1666,11 +1999,11 @@ function generateMemberStatement(){
 
   if(history.length === 0) return;
 
-  const latest = history[history.length - 1];
-  const totalReturn = latest.memberTotalContrib > 0 ? ((latest.shareValue - latest.memberTotalContrib) / latest.memberTotalContrib) * 100 : 0;
+  const figures = memberFigures(memberName, history);
+  const totalReturn = figures.returnPct;
 
-  // Find first contribution date for period
-  const firstDate = history.find(h => h.amount > 0)?.date || "—";
+  // The period starts at the first contribution or transfer
+  const firstDate = history.find(h => h.type !== "value")?.date || "—";
   const today = new Date().toLocaleDateString("en-PH", {year:"numeric", month:"long", day:"numeric"});
 
   // Populate statement
@@ -1684,12 +2017,26 @@ function generateMemberStatement(){
   document.getElementById("stmt-nav").textContent = currentNav;
   document.getElementById("stmt-fund-value").textContent = fundValue;
 
-  document.getElementById("stmt-contrib").textContent = fmtPeso(latest.memberTotalContrib);
-  document.getElementById("stmt-units").textContent = fmtUnits(latest.memberTotalUnits);
-  document.getElementById("stmt-pct").textContent = totalUnits > 0 ? ((latest.memberTotalUnits / totalUnits) * 100).toFixed(2) + "%" : "—";
-  document.getElementById("stmt-current").textContent = fmtPeso(latest.shareValue);
+  document.getElementById("stmt-contrib").textContent = fmtPeso(figures.contributed);
+  document.getElementById("stmt-bought").textContent = fmtPeso(figures.bought);
+  document.getElementById("stmt-cost").textContent = fmtPeso(figures.cost);
+  document.getElementById("stmt-realized").textContent = fmtSignedPeso(figures.realized);
+  document.querySelectorAll(".stmt-trade-row").forEach(row => row.style.display = figures.traded ? "" : "none");
+  const reserved = reservedUnits(memberName);
+  document.getElementById("stmt-reserved").textContent = fmtUnits(reserved);
+  document.getElementById("stmt-reserved-row").style.display = reserved > 0 ? "" : "none";
+  document.getElementById("stmt-units").textContent = fmtUnits(figures.units);
+  document.getElementById("stmt-pct").textContent = totalUnits > 0 ? ((figures.units / totalUnits) * 100).toFixed(2) + "%" : "—";
+  document.getElementById("stmt-current").textContent = fmtPeso(figures.value);
 
-  const gain = latest.shareValue - latest.memberTotalContrib;
+  const trades = history.filter(h => h.type === "bought" || h.type === "sold");
+  document.getElementById("stmt-transfer-section").style.display = trades.length ? "" : "none";
+  document.getElementById("stmt-transfer-body").innerHTML = trades.map(h => `
+    <tr><td class="mono">${h.date}</td><td class="mono">${h.transfer.certificateNo}</td>
+    <td>${h.type === "bought" ? "Bought from" : "Sold to"} ${escapeHtml(h.type === "bought" ? h.transfer.seller : buyerNames(h.transfer))}</td>
+    <td class="mono">${fmtUnits(Math.abs(h.unitsIssued))}</td><td class="mono">${fmtPeso(h.amount)}</td></tr>`).join("");
+
+  const gain = figures.gain;
   const gainEl = document.getElementById("stmt-gain");
   gainEl.textContent = (gain >= 0 ? "+" : "") + fmtPeso(gain);
   gainEl.style.color = gain >= 0 ? "#16a34a" : "#dc2626";
@@ -1701,7 +2048,7 @@ function generateMemberStatement(){
   // Populate history table
   const tbody = document.getElementById("stmt-history-body");
   tbody.innerHTML = "";
-  history.filter(h => h.amount > 0).forEach(h => {
+  history.filter(h => h.type === "contribution").forEach(h => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono">${h.date}</td>
@@ -1715,6 +2062,7 @@ function generateMemberStatement(){
   });
 
   // Show and print
+  document.body.classList.remove("print-cert");
   const view = document.getElementById("print-statement-view");
   view.style.display = "block";
   window.print();
@@ -1722,6 +2070,21 @@ function generateMemberStatement(){
 }
 
 document.getElementById("btn-print-statement").addEventListener("click", generateMemberStatement);
+
+// ============================================
+// TRANSFERS (view only)
+// ============================================
+function renderTransfers(){
+  updateTransferCount();
+  document.getElementById("t-list").innerHTML = sortedTransfers().map(t => transferCardHtml(t,
+    t.certificateNo ? `<button type="button" class="btn-print" data-print="${escapeHtml(t.id)}">Print Certificate</button>` : ""
+  )).join("") || '<div class="no-data">No transfers yet.</div>';
+}
+
+document.getElementById("t-list").addEventListener("click", e => {
+  const button = e.target.closest("[data-print]");
+  if(button) printCertificate(button.dataset.print, true);
+});
 
 // ============================================
 // INIT
