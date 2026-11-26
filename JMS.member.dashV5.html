@@ -88,6 +88,11 @@
   .current-pv-display .label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;}
   .current-pv-display .value{font-size:20px;font-weight:800;color:var(--primary-dark);margin-top:4px;}
   .current-pv-display .nav{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .as-of{font-size:12px;font-weight:600;color:var(--ink-soft);margin-top:2px;}
+  .as-of:empty{display:none;}
+  .as-of-line{text-align:center;margin-bottom:12px;}
+  .units-note ul{margin:4px 0 0;padding-left:18px;}
+  header .badge{display:table;margin:0 auto 10px;}
 
   .ledger-list{width:100%;margin-top:16px;}
   .ledger-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
@@ -276,8 +281,9 @@
     <div class="logo-wrap">
       <img src="https://raw.githubusercontent.com/raagassteven6-max/jms-holdings-funds/main/logo2.png" alt="JMS Holdings" class="site-logo">
     </div>
+    <div class="badge">Member view</div>
     <h1>Fund Ownership Dashboard</h1>
-    <div class="sub">Live unit &amp; ownership summary — read-only member view</div>
+    <div class="sub">Live unit &amp; ownership summary</div>
   </header>
 
   <div class="tab-nav">
@@ -345,6 +351,7 @@
           <div class="label">Current Portfolio Value</div>
           <div class="value mono" id="display-current-pv">₱0.00</div>
           <div class="nav mono" id="display-current-nav">Current NAV: —</div>
+          <div class="as-of"></div>
         </div>
         <div class="perf-grid" id="perf-grid" style="display:none;">
           <div class="perf-card" id="card-total-contrib"><div class="perf-value mono" id="perf-total-contrib">₱0.00</div><div class="perf-label">Total Contributed</div></div>
@@ -376,12 +383,22 @@
         <div class="ledger-list" id="ledger-list"></div>
         <div class="status-banner" id="status-banner"></div>
         <div class="notice"><strong>Read-only view:</strong> only the treasurer can add or remove contributions. Contact the treasurer if you spot any discrepancies.</div>
-        <div class="notice" style="margin-top:10px;background:#f0fdf4;border-color:#bbf7d0;color:#14532d;"><strong>How this works:</strong> Your share is calculated in units based on the fund's NAV (Net Asset Value per Unit) at the time of each contribution. The fund's current market value is updated periodically by the treasurer, which determines your unrealized gain or loss. Green means your share is worth more than you put in; red means it's worth less.</div>
+        <div class="notice units-note" style="margin-top:10px;background:#f0fdf4;border-color:#bbf7d0;color:#14532d;">
+          <strong>How units work</strong>
+          <ul>
+            <li>Units are your slices of the fund.</li>
+            <li>Value per unit (shown as NAV) = fund value ÷ total units.</li>
+            <li>Your value = your units × value per unit.</li>
+            <li>Adding money buys units at that day's value, so it doesn't change the value of anyone else's units.</li>
+          </ul>
+          <div style="margin-top:6px;">Green means your share is worth more than you put in. Red means it's worth less.</div>
+        </div>
       </section>
     </main>
   </div>
 
   <div class="tab-panel" id="tab-analytics">
+    <div class="as-of as-of-line"></div>
     <div class="sub-tab-nav">
       <button class="sub-tab-btn active" data-subtab="fund">Fund Metrics</button>
       <button class="sub-tab-btn" data-subtab="member">Member Metrics</button>
@@ -455,6 +472,7 @@
           <div><strong>Member Name:</strong> <span id="stmt-name">—</span></div>
           <div><strong>Statement Period:</strong> <span id="stmt-period">—</span></div>
           <div><strong>Date Generated:</strong> <span id="stmt-date">—</span></div>
+          <div><strong>Values as of:</strong> <span id="stmt-asof">—</span></div>
         </div>
         <div class="statement-section">
           <div class="statement-section-title">FUND SNAPSHOT</div>
@@ -763,6 +781,21 @@ function getLatestPV(){
   return pvSnapshots[pvSnapshots.length - 1].value;
 }
 
+// The date of the latest value written out in full, e.g. "November 26, 2026"
+function formatValueDate(){
+  const isoDate = pvSnapshots[pvSnapshots.length - 1]?.date;
+  if(!isoDate) return "";
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"});
+}
+
+// Fills every "Values as of" line, and leaves them empty when there is nothing to value
+function showValueDate(){
+  const hasValues = entries.length > 0 && getLatestPV() > 0;
+  const text = hasValues ? `Values as of ${formatValueDate()}` : "";
+  document.querySelectorAll(".as-of").forEach(el => el.textContent = text);
+}
+
 function computePerformance(ownership, totalUnits){
   const key = _fullKey();
   const cached = _cacheHit("perf", key);
@@ -805,6 +838,7 @@ function render(){
   const { rows, totalUnits } = computeLedger();
   const ownership = computeOwnership(rows, totalUnits);
   const perf = computePerformance(ownership, totalUnits);
+  showValueDate();
 
   const dl = document.getElementById("member-list");
   dl.innerHTML = "";
@@ -1643,6 +1677,7 @@ function generateMemberStatement(){
   document.getElementById("stmt-name").textContent = memberName;
   document.getElementById("stmt-period").textContent = firstDate + " – Present";
   document.getElementById("stmt-date").textContent = today;
+  document.getElementById("stmt-asof").textContent = formatValueDate() || "—";
 
   const currentNav = perf ? perf.currentNav.toFixed(4) : "—";
   const fundValue = perf ? fmtPeso(perf.totalCurrentValue) : "—";
