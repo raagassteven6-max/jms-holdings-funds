@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0b2e29">
-<title>JMS Holdings — Ownership Dashboard</title>
+<title>JMS Holdings — Admin Dashboard</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -142,6 +142,8 @@ button{font-family:inherit;cursor:pointer;border:none;}
 .badge{font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#f2d79b;}
 h1{margin:2px 0;font-size:clamp(25px,3.6vw,36px);font-weight:600;line-height:1.15;letter-spacing:-.01em;color:#fff;}
 .sub{font-size:15px;color:#bcd0c8;}
+.badge-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;}
+.role-tag{padding:1px 8px;border-radius:4px;background:var(--brass);color:var(--night);font-size:11.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;}
 
 .config-ok{
   display:none;align-items:center;gap:9px;
@@ -274,6 +276,11 @@ textarea{min-height:80px;resize:vertical;font-size:13px;}
   overflow-wrap:anywhere;
 }
 .current-pv-display .nav{margin-top:10px;font-size:14px;color:#bcd0c8;}
+.as-of{font-size:13.5px;color:var(--ink-soft);}
+.as-of:empty{display:none;}
+.current-pv-display .as-of{margin-top:2px;color:#f2d79b;}
+.as-of-line{margin-bottom:12px;}
+.units-note ul{margin:4px 0 0;padding-left:18px;}
 
 .perf-grid{
   flex:2.2 1 520px;
@@ -558,7 +565,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
       <div class="brand">
         <div class="monogram" aria-hidden="true">JMS</div>
         <div>
-          <div class="badge">JMS Holdings</div>
+          <div class="badge-row"><span class="badge">JMS Holdings</span><span class="role-tag">Admin</span></div>
           <h1>Fund Ownership Dashboard</h1>
           <div class="sub">Live unit &amp; ownership summary — updates the moment a contribution is logged</div>
         </div>
@@ -607,7 +614,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
         <div class="config-status" id="cfg-status" aria-live="polite"></div>
         <div class="bin-id-display" id="bin-id-display" style="display:none;"></div>
         <div class="fallback-notice" id="fallback-notice" style="display:none;">
-          <b>Cloud connection failed.</b> Your data is being saved locally in this browser only. To share with family, you'll need to export your data manually (coming soon).
+          <b>Cloud connection failed.</b> Nothing is connected yet, so entries added now stay in this browser only. Check your Master Key and internet, then try again.
         </div>
       </div>
 
@@ -617,6 +624,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
           <div class="label">Current Portfolio Value</div>
           <div class="value mono" id="display-current-pv">₱0.00</div>
           <div class="nav mono" id="display-current-nav">Current NAV: —</div>
+          <div class="as-of"></div>
         </div>
         <div class="perf-grid" id="perf-grid" style="display:none;">
           <div class="perf-card" id="card-total-contrib">
@@ -702,7 +710,16 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
               </div>
             </div>
             <div class="notice">
-              <strong>Shared with the family:</strong> anyone with this link can see and add entries here. Keep the link within the family only.
+              <strong>Treasurer's page:</strong> entries added or removed here change the fund records for everyone. Keep the Master Key private. Family members use the member view with the read-only key.
+            </div>
+            <div class="notice units-note">
+              <strong>How units work</strong>
+              <ul>
+                <li>Units are your slices of the fund.</li>
+                <li>Value per unit (shown as NAV) = fund value ÷ total units.</li>
+                <li>Your value = your units × value per unit.</li>
+                <li>Adding money buys units at that day's value, so it doesn't change the value of anyone else's units.</li>
+              </ul>
             </div>
           </section>
 
@@ -743,6 +760,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
 
     <!-- ====== ANALYTICS TAB ====== -->
     <div class="tab-panel" id="tab-analytics">
+      <div class="as-of as-of-line"></div>
       <div class="sub-tab-nav">
         <button class="sub-tab-btn active" data-subtab="fund">Fund Metrics</button>
         <button class="sub-tab-btn" data-subtab="member">Member Metrics</button>
@@ -906,6 +924,7 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
     </div>
     <div class="fund-log-meta">
       <div><strong>Report Generated:</strong> <span id="fl-date">—</span></div>
+      <div><strong>Values as of:</strong> <span id="fl-asof">—</span></div>
       <div><strong>Total Entries:</strong> <span id="fl-entries">—</span></div>
       <div><strong>Total Members:</strong> <span id="fl-members">—</span></div>
     </div>
@@ -941,6 +960,6 @@ main{display:grid;grid-template-columns:minmax(320px,390px) minmax(0,1fr);gap:20
 </div>
 
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

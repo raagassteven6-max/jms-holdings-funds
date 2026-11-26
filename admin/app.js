@@ -141,6 +141,21 @@ function getLatestPV(){
   return pvSnapshots[pvSnapshots.length - 1].value;
 }
 
+// The date of the latest value written out in full, e.g. "November 26, 2026"
+function formatValueDate(){
+  const isoDate = pvSnapshots[pvSnapshots.length - 1]?.date;
+  if(!isoDate) return "";
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"});
+}
+
+// Fills every "Values as of" line, and leaves them empty when there is nothing to value
+function showValueDate(){
+  const hasValues = entries.length > 0 && getLatestPV() > 0;
+  const text = hasValues ? `Values as of ${formatValueDate()}` : "";
+  document.querySelectorAll(".as-of").forEach(el => el.textContent = text);
+}
+
 function getPVForDate(dateStr){
   // Find the most recent snapshot on or before the given date
   if(!pvSnapshots || pvSnapshots.length === 0) return null;
@@ -547,6 +562,7 @@ function render(){
   const { rows, totalUnits } = computeLedger();
   const ownership = computeOwnership(rows, totalUnits);
   const perf = computePerformance(ownership, totalUnits);
+  showValueDate();
 
   const dl = document.getElementById("member-list");
   dl.innerHTML = "";
@@ -1263,8 +1279,9 @@ async function createNewBin(){
 
     document.getElementById("fallback-notice").style.display = "block";
     document.getElementById("fallback-notice").innerHTML = `
-      <b>Cloud connection failed.</b> ${e.message}<br>
-      Your data will be saved locally in this browser. You can still use the dashboard, but data won't sync across devices.
+      <b>Cloud connection failed.</b> ${escapeHtml(e.message)}<br>
+      Nothing is connected yet, so entries added now stay in this browser only and will not move to the cloud later.<br>
+      Check your Master Key and internet, then try again.
     `;
   }
 }
@@ -1648,6 +1665,7 @@ function generateFundLog(){
   const members = [...new Set(entries.map(e => e.member).filter(m => m))];
 
   document.getElementById("fl-date").textContent = today;
+  document.getElementById("fl-asof").textContent = formatValueDate() || "—";
   document.getElementById("fl-entries").textContent = entries.length;
   document.getElementById("fl-members").textContent = members.length;
 
